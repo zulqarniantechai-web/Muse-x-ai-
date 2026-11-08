@@ -89,15 +89,17 @@ Do not claim that you generated actual images or videos.`,
         chat_template_kwargs: { enable_thinking: false },
       }, { rejectIfBusy: true });
 
-      // Workers AI model responses can be returned in different object shapes.
-      // Preserve the full result as a fallback instead of assuming .response exists.
+      // Gemma chat-completion responses place generated text in choices[0].message.content.
+      // Keep compatible fallbacks for other Workers AI response shapes.
       const content = typeof aiResult === "string"
         ? aiResult
-        : typeof aiResult?.response === "string"
-          ? aiResult.response
-          : typeof aiResult?.result?.response === "string"
-            ? aiResult.result.response
-            : JSON.stringify(aiResult);
+        : typeof aiResult?.choices?.[0]?.message?.content === "string"
+          ? aiResult.choices[0].message.content
+          : typeof aiResult?.response === "string"
+            ? aiResult.response
+            : typeof aiResult?.result?.response === "string"
+              ? aiResult.result.response
+              : null;
 
       const plan = extractJson(content);
       if (!plan) {
