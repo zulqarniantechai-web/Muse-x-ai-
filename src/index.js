@@ -105,8 +105,8 @@ export default {
         const result=await fetch(base+"/gradio_api/call/text_to_video/"+job.event_id,{headers:{"Accept":"text/event-stream"},signal:AbortSignal.timeout(300000)});
         if(!result.ok)throw new Error("LTX نتیجہ حاصل نہیں ہوا (HTTP "+result.status+")۔");
         const raw=await result.text();let payload=null,failure=null;
-        for(const block of raw.split("\\n\\n")){
-          const event=block.match(/^event:\\s*(\\S+)/m)?.[1],line=block.match(/^data:\\s*(.+)$/m)?.[1];
+        for(const block of raw.split("\n\n")){
+          const event=block.match(/^event:\s*(\S+)/m)?.[1],line=block.match(/^data:\s*(.+)$/m)?.[1];
           if(event==="error")failure=line||"LTX generation failed";
           if(event==="complete"&&line){try{payload=JSON.parse(line)}catch{}}
         }
