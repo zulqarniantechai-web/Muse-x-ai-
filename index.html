@@ -482,6 +482,24 @@ $('makeSceneImages').onclick=async()=>{
    download.className='secondary';download.textContent='یہ تصویر ڈاؤن لوڈ کریں';
    download.onclick=()=>{const a=document.createElement('a');a.href=data.image;a.download='musex-scene-'+(i+1)+'.jpg';a.click()};
    card.append(heading,img,download);
+   const animate=document.createElement('button');
+   animate.textContent='اس سین کو WAN 2.2 سے Animate کریں';
+   animate.onclick=async()=>{
+    try{
+     const blob=await (await fetch(data.image)).blob();
+     const file=new File([blob],'musex-scene-'+(i+1)+'.jpg',{type:blob.type||'image/jpeg'});
+     const transfer=new DataTransfer();transfer.items.add(file);
+     $('wanImage').files=transfer.files;
+     $('wanImage').dispatchEvent(new Event('change'));
+     $('wanPrompt').value=(typeof scene.video_prompt==='string'&&scene.video_prompt.trim())
+       ? scene.video_prompt.trim()
+       : 'Animate the subject with natural realistic body movement, subtle facial expressions, and cinematic environmental motion. Preserve the same identity, face, clothing and composition. No morphing or extra limbs.';
+     $('wanPrompt').dispatchEvent(new Event('input'));
+     document.getElementById('wanImage').scrollIntoView({behavior:'smooth',block:'center'});
+     $('wanStatus').textContent='سین '+(i+1)+' کی تصویر اور اس کا Motion Prompt WAN 2.2 میں بھر دیا گیا ہے۔ اب WAN 2.2 Generate بٹن دبائیں۔';
+    }catch(error){$('sceneImageStatus').textContent='سین کو WAN 2.2 میں منتقل نہیں کیا جا سکا: '+error.message}
+   };
+   card.append(animate);
 
    $('sceneImageGallery').append(card);
    completed++;
