@@ -17,7 +17,7 @@ small{color:#5b6878}.status{font-weight:bold;color:#145c37}
 <main>
 <section class="card">
 <h2>اسکرپٹ تجزیہ</h2>
-<label for="endpoint">Backend URL</label><input id="endpoint" placeholder="مثلاً https://your-service.onrender.com">
+<label for="endpoint">Backend URL</label><input id="endpoint" type="url" value="https://muse-x-ai.zulqarniantechai.workers.dev" placeholder="Cloudflare Worker URL">
 <label for="script">اپنی مکمل اسکرپٹ یہاں پیسٹ کریں</label>
 <textarea id="script" placeholder="یہاں اپنی کہانی یا ویڈیو اسکرپٹ پیسٹ کریں..."></textarea>
 <button id="run">پروجیکٹ شروع کریں</button>
@@ -25,7 +25,7 @@ small{color:#5b6878}.status{font-weight:bold;color:#145c37}
 <p id="status" class="status" aria-live="polite"></p>
 </section>
 <section class="card"><h2>AI Production Plan</h2><pre id="result">تجزیے کا نتیجہ یہاں ظاہر ہوگا۔</pre><button id="save" class="secondary">نتیجہ JSON ڈاؤن لوڈ کریں</button></section>
-<section class="card"><small>اہم: AI تجزیے کے لیے الگ Backend deploy کرنا اور اس کے Environment Variables میں OPENAI_API_KEY محفوظ کرنا ضروری ہے۔ API key اس HTML فائل میں ہرگز نہ ڈالیں۔</small></section>
+<section class="card"><small>Backend: Cloudflare Workers AI · مفت استعمال کی حد دستیاب ہونے پر ہی تجزیہ چلے گا۔ کوئی Paid API یا خودکار Paid fallback شامل نہیں۔</small></section>
 </main>
 <script>
 let lastResult=null;
