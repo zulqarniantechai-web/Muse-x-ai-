@@ -37,6 +37,48 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
+
+    if (url.pathname === "/wan22/generate" && request.method === "POST") {
+      try {
+        const form = await request.formData();
+        const image = form.get("image");
+        const rawParams = form.get("params");
+        if (!(image instanceof File)) return response({ error: "ایک تصویر اپلوڈ کریں۔" }, 400);
+        if (image.size > 8 * 1024 * 1024) return response({ error: "تصویر 8 MB یا اس سے کم ہونی چاہیے۔" }, 413);
+        let params = {};
+        try { params = typeof rawParams === "string" ? JSON.parse(rawParams) : {}; } catch {}
+        const prompt = typeof params.prompt === "string" ? params.prompt.trim() : "";
+        if (!prompt) return response({ error: "Motion Prompt درج کریں۔" }, 400);
+        if (prompt.length > 2000) return response({ error: "Motion Prompt زیادہ لمبا ہے؛ 2,000 حروف تک رکھیں۔" }, 413);
+        const space = "https://cbensimon-wan2-2-fp8da-aoti-preview2.hf.space";
+        const uploaded = await fetch(space + "/gradio_api/upload", { method: "POST", body: (() => { const f = new FormData(); f.append("files", image, image.name || "input.png"); return f; })() });
+        if (!uploaded.ok) throw new Error("تصویر Wan 2.2 Space پر اپلوڈ نہیں ہوئی (" + uploaded.status + ")۔ Space سو رہی یا مصروف ہو سکتی ہے۔");
+        const paths = await uploaded.json();
+        if (!Array.isArray(paths) || !paths[0]) throw new Error("Wan 2.2 image upload کا جواب درست نہیں۔");
+        const imagePath = paths[0];
+        const inputImage = { path: imagePath, url: space + "/gradio_api/file=" + imagePath, orig_name: image.name || "input.png", size: image.size, mime_type: image.type || "image/png", meta: { _type: "gradio.FileData" } };
+        const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+        const data = [
+          inputImage, null, prompt,
+          clamp(Math.round(Number(params.steps) || 6), 1, 12),
+          "色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 风格, 作品, 画作, 画面, 静止, 整体发灰, 最差质量, 低质量, JPEG压缩残留, 丑陋的, 残缺的, 多余的手指, 画得不好的手部, 画得不好的脸部, 畸形的, 毁容的, 形态畸形的肢体, 手指融合, 静止不动的画面, 杂乱的背景, 三条腿, 背景人很多, 倒着走",
+          clamp(Number(params.duration_seconds) || 3.5, 0.5, 4.5),
+          1, 1, 42, true, 6, "UniPCMultistep", 3.0, 16, false, true
+        ];
+        const submit = await fetch(space + "/gradio_api/call/generate_video", {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data })
+        });
+        if (!submit.ok) throw new Error("Wan 2.2 generation job جمع نہیں ہوا (" + submit.status + ")۔");
+        const job = await submit.json();
+        if (!job.event_id) throw new Error("Wan 2.2 نے generation event ID واپس نہیں کی۔");
+        const upstream = await fetch(space + "/gradio_api/call/generate_video/" + job.event_id, { headers: { "Accept": "text/event-stream" } });
+        if (!upstream.ok || !upstream.body) throw new Error("Wan 2.2 result stream نہیں کھل سکی (" + upstream.status + ")۔");
+        return new Response(upstream.body, { status: 200, headers: { ...corsHeaders, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no" } });
+      } catch (error) {
+        return response({ error: error?.message || "Wan 2.2 generation failed" }, 502);
+      }
+    }
+
     if (url.pathname === "/health" && request.method === "GET") {
       return response({
         status: "online",
