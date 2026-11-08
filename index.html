@@ -25,6 +25,17 @@ small{color:#5b6878}.status{font-weight:bold;color:#145c37}
 <p id="status" class="status" aria-live="polite"></p>
 </section>
 <section class="card"><h2>AI Production Plan</h2><pre id="result">تجزیے کا نتیجہ یہاں ظاہر ہوگا۔</pre><button id="save" class="secondary">نتیجہ JSON ڈاؤن لوڈ کریں</button></section>
+
+<section class="card">
+<h2>AI تصویر بنائیں</h2>
+<label for="imagePrompt">تصویر کی تفصیل (Image Prompt)</label>
+<textarea id="imagePrompt" placeholder="مثال: Cinematic horror scene, a frightened young man in a dark bedroom at midnight, realistic film lighting..." style="min-height:120px"></textarea>
+<button id="makeImage">تصویر بنائیں</button>
+<p id="imageStatus" class="status" aria-live="polite"></p>
+<img id="generatedImage" alt="AI سے تیار کردہ تصویر" style="display:none;width:100%;max-width:700px;border-radius:12px;margin-top:12px">
+<button id="downloadImage" class="secondary" style="display:none">تصویر ڈاؤن لوڈ کریں</button>
+<small>ماڈل: FLUX.1 schnell · مفت روزانہ AI حد کے اندر۔ حد ختم ہونے پر درخواست رک جائے گی؛ کوئی Paid fallback نہیں۔</small>
+</section>
 <section class="card"><small>Backend: Cloudflare Workers AI · مفت استعمال کی حد دستیاب ہونے پر ہی تجزیہ چلے گا۔ کوئی Paid API یا خودکار Paid fallback شامل نہیں۔</small></section>
 </main>
 <script>
@@ -42,5 +53,28 @@ $('run').onclick=async()=>{
  }catch(e){$('status').textContent='خرابی: '+e.message+' — Backend URL اور deployment چیک کریں۔'}
 };
 $('download').onclick=()=>{const b=new Blob([$('script').value],{type:'text/plain;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='musex-script.txt';a.click();URL.revokeObjectURL(a.href)};
+let generatedImageData=null;
+$('makeImage').onclick=async()=>{
+ const prompt=$('imagePrompt').value.trim(), endpoint=$('endpoint').value.trim().replace(/\/$/,'');
+ if(!prompt){$('imageStatus').textContent='پہلے تصویر کی تفصیل لکھیں۔';return}
+ if(!endpoint){$('imageStatus').textContent='Backend URL درج کریں۔';return}
+ $('imageStatus').textContent='تصویر بن رہی ہے، براہ کرم انتظار کریں...';
+ $('makeImage').disabled=true;
+ try{
+  const r=await fetch(endpoint+'/generate-image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
+  const data=await r.json();
+  if(!r.ok||!data.success)throw new Error(data.error||data.note||'Image generation failed');
+  generatedImageData=data.image;
+  $('generatedImage').src=generatedImageData;
+  $('generatedImage').style.display='block';
+  $('downloadImage').style.display='inline-block';
+  $('imageStatus').textContent='تصویر تیار ہوگئی۔';
+ }catch(e){$('imageStatus').textContent='خرابی: '+e.message}
+ finally{$('makeImage').disabled=false}
+};
+$('downloadImage').onclick=()=>{
+ if(!generatedImageData)return;
+ const a=document.createElement('a');a.href=generatedImageData;a.download='musex-ai-image.jpg';a.click();
+};
 $('save').onclick=()=>{if(!lastResult){$('status').textContent='ابھی کوئی AI نتیجہ موجود نہیں۔';return}const b=new Blob([JSON.stringify(lastResult,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='musex-production-plan.json';a.click();URL.revokeObjectURL(a.href)};
 </script></body></html>
