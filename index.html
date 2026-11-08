@@ -35,6 +35,12 @@ small{color:#5b6878}.status{font-weight:bold;color:#145c37}
 <img id="generatedImage" alt="AI سے تیار کردہ تصویر" style="display:none;width:100%;max-width:700px;border-radius:12px;margin-top:12px">
 <button id="downloadImage" class="secondary" style="display:none">تصویر ڈاؤن لوڈ کریں</button>
 <small>ماڈل: FLUX.1 schnell · مفت روزانہ AI حد کے اندر۔ حد ختم ہونے پر درخواست رک جائے گی؛ کوئی Paid fallback نہیں۔</small>
+<hr style="border:0;border-top:1px solid #dce3ed;margin:20px 0">
+<h3>ہر سین کی الگ تصویر بنائیں</h3>
+<p><small>پہلے اوپر اسکرپٹ کا تجزیہ مکمل کریں۔ پھر یہ بٹن ہر سین کے image prompt سے الگ تصویر بنائے گا۔ مفت حد ختم ہونے پر مزید تصاویر رک جائیں گی۔</small></p>
+<button id="makeSceneImages">تمام سینز کی تصاویر بنائیں</button>
+<p id="sceneImageStatus" class="status" aria-live="polite"></p>
+<div id="sceneImageGallery"></div>
 </section>
 <section class="card"><small>Backend: Cloudflare Workers AI · مفت استعمال کی حد دستیاب ہونے پر ہی تجزیہ چلے گا۔ کوئی Paid API یا خودکار Paid fallback شامل نہیں۔</small></section>
 </main>
@@ -75,6 +81,48 @@ $('makeImage').onclick=async()=>{
 $('downloadImage').onclick=()=>{
  if(!generatedImageData)return;
  const a=document.createElement('a');a.href=generatedImageData;a.download='musex-ai-image.jpg';a.click();
+};
+$('makeSceneImages').onclick=async()=>{
+ const scenes=lastResult?.production_plan?.scenes;
+ const endpoint=$('endpoint').value.trim().replace(/\\/$/,'');
+ if(!Array.isArray(scenes)||!scenes.length){
+  $('sceneImageStatus').textContent='پہلے اسکرپٹ کا تجزیہ کریں تاکہ سینز تیار ہوں۔';return;
+ }
+ if(!endpoint){$('sceneImageStatus').textContent='Backend URL درج کریں۔';return}
+ const button=$('makeSceneImages');
+ button.disabled=true;
+ $('sceneImageGallery').replaceChildren();
+ let completed=0;
+ try{
+  for(let i=0;i<scenes.length;i++){
+   const scene=scenes[i];
+   const prompt=scene.image_prompt;
+   if(typeof prompt!=='string'||!prompt.trim()){
+    $('sceneImageStatus').textContent='سین '+(i+1)+' کا image prompt موجود نہیں؛ باقی عمل روک دیا گیا۔';break;
+   }
+   $('sceneImageStatus').textContent='سین '+(i+1)+' / '+scenes.length+' کی تصویر بن رہی ہے...';
+   const r=await fetch(endpoint+'/generate-image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
+   const data=await r.json();
+   if(!r.ok||!data.success)throw new Error('سین '+(i+1)+': '+(data.error||data.note||'تصویر نہیں بن سکی'));
+   const card=document.createElement('div');
+   card.className='card';
+   const heading=document.createElement('h4');
+   heading.textContent='سین '+(scene.scene_number||i+1);
+   const img=document.createElement('img');
+   img.src=data.image;img.alt='سین '+(i+1)+' کی AI تصویر';
+   img.style.cssText='width:100%;max-width:650px;border-radius:10px';
+   const download=document.createElement('button');
+   download.className='secondary';download.textContent='یہ تصویر ڈاؤن لوڈ کریں';
+   download.onclick=()=>{const a=document.createElement('a');a.href=data.image;a.download='musex-scene-'+(i+1)+'.jpg';a.click()};
+   card.append(heading,img,download);
+   $('sceneImageGallery').append(card);
+   completed++;
+  }
+  if(completed===scenes.length)$('sceneImageStatus').textContent='مکمل! '+completed+' سینز کی تصاویر تیار ہوگئیں۔';
+  else if(completed>0)$('sceneImageStatus').textContent=completed+' تصاویر تیار ہوئیں؛ باقی سینز مکمل نہیں ہوئے۔';
+ }catch(e){
+  $('sceneImageStatus').textContent='عمل رک گیا: '+e.message+'۔ تیار شدہ تصاویر نیچے موجود ہیں۔';
+ }finally{button.disabled=false}
 };
 $('save').onclick=()=>{if(!lastResult){$('status').textContent='ابھی کوئی AI نتیجہ موجود نہیں۔';return}const b=new Blob([JSON.stringify(lastResult,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='musex-production-plan.json';a.click();URL.revokeObjectURL(a.href)};
 </script></body></html>
