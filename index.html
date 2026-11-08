@@ -36,15 +36,22 @@ small{color:#5b6878}.status{font-weight:bold;color:#145c37}
 <button id="downloadImage" class="secondary" style="display:none">تصویر ڈاؤن لوڈ کریں</button>
 <small>ماڈل: FLUX.1 schnell · مفت روزانہ AI حد کے اندر۔ حد ختم ہونے پر درخواست رک جائے گی؛ کوئی Paid fallback نہیں۔</small>
 <hr style="border:0;border-top:1px solid #dce3ed;margin:20px 0">
-<h3>تصاویر سے ویڈیو بنائیں</h3>
-<p><small>اپنے موبائل کی Gallery سے سینز کی تصاویر منتخب کریں۔ یہ انہیں ترتیب وار ایک خاموش slideshow ویڈیو میں جوڑے گا۔</small></p>
-<label for="videoImages">سینز کی تصاویر منتخب کریں</label>
-<input id="videoImages" type="file" accept="image/*" multiple>
-<label style="display:flex;align-items:center;gap:9px;font-weight:normal"><input id="splitGrid" type="checkbox" checked style="width:auto"> اگر تصویر 2×2 گرڈ ہے تو اسے چار الگ شاٹس میں تقسیم کریں</label>
-<small>ہر شاٹ میں 3D-style کیمرہ زاویہ، سائیڈ موومنٹ، گہرائی، روشنی، دھند اور متحرک ذرات شامل ہوں گے۔ یہ حقیقی AI کرداروں کی باڈی اینیمیشن نہیں ہے۔</small>
-<button id="makeSlideshow">موشن ویڈیو بنائیں</button>
-<p id="videoStatus" class="status" aria-live="polite"></p>
-<button id="downloadVideo" class="secondary" style="display:none">ویڈیو ڈاؤن لوڈ کریں</button>
+<h3>WAN 2.2 — حقیقی Image-to-Video موشن</h3>
+<p><small>ایک تصویر اپلوڈ کریں، موشن پرامپٹ لکھیں، اور Wan 2.2 AI سے حقیقی ویڈیو بنائیں۔ یہ صرف Zoom یا Pan ایفیکٹ نہیں ہے۔</small></p>
+<label for="wanImage">ایک تصویر منتخب کریں (PNG / JPG / WEBP، زیادہ سے زیادہ 8 MB)</label>
+<input id="wanImage" type="file" accept="image/png,image/jpeg,image/webp">
+<img id="wanPreview" alt="WAN 2.2 input preview" style="display:none;width:100%;max-width:520px;border-radius:10px;margin-top:12px">
+<label for="wanPrompt">Motion Prompt</label>
+<textarea id="wanPrompt" style="min-height:130px" placeholder="The character slowly turns their head, blinks naturally, then takes two careful steps forward. Hair and clothing move gently in the wind. The camera makes a subtle cinematic tracking movement. Preserve the same face, identity, clothing and background. Natural realistic motion, no morphing, no extra limbs."></textarea>
+<label for="wanDuration">ویڈیو دورانیہ: <span id="wanDurationValue">3.5</span> سیکنڈ</label>
+<input id="wanDuration" type="range" min="1" max="4.5" step="0.5" value="3.5">
+<label for="wanSteps">موشن کوالٹی / Steps: <span id="wanStepsValue">6</span></label>
+<input id="wanSteps" type="range" min="4" max="12" step="1" value="6">
+<button id="wanGenerate">WAN 2.2 سے موشن ویڈیو بنائیں</button>
+<p id="wanStatus" class="status" aria-live="polite"></p>
+<video id="wanResult" controls playsinline style="display:none;width:100%;max-width:700px;border-radius:12px;margin-top:12px"></video>
+<a id="wanDownload" class="secondary" download="musex-wan22-motion.mp4" style="display:none;color:#1764b1;font-weight:bold">تیار MP4 ویڈیو ڈاؤن لوڈ کریں</a>
+<small>مفت عوامی GPU استعمال ہوگا۔ پہلی بار cold start، انتظار، queue یا عارضی عدم دستیابی ممکن ہے۔ کوئی paid API یا خودکار ادائیگی شامل نہیں۔ ویڈیو کی حد تقریباً 4.5 سیکنڈ ہے۔</small>
 <hr style="border:0;border-top:1px solid #dce3ed;margin:20px 0">
 <hr style="border:0;border-top:1px solid #dce3ed;margin:20px 0">
 <h3>Final Video Composer — مکمل ویڈیو بنائیں</h3>
@@ -475,18 +482,7 @@ $('makeSceneImages').onclick=async()=>{
    download.className='secondary';download.textContent='یہ تصویر ڈاؤن لوڈ کریں';
    download.onclick=()=>{const a=document.createElement('a');a.href=data.image;a.download='musex-scene-'+(i+1)+'.jpg';a.click()};
    card.append(heading,img,download);
-   const motion=document.createElement('button');
-   motion.textContent='AI موشن / کردار کی حرکت بنائیں';
-   motion.className='secondary';
-   motion.onclick=()=>{
-    const motionPrompt=(typeof scene.video_prompt==='string'&&scene.video_prompt.trim())
-      ? scene.video_prompt.trim()
-      : 'Animate the character naturally: make the person walk forward with realistic body movement, natural arm and leg motion, subtle facial expression, and cinematic environmental movement. Preserve the same character identity, face, clothing, and scene composition. No morphing, no extra limbs.';
-    try{navigator.clipboard.writeText(motionPrompt)}catch(e){}
-    window.open('https://igorcsis.github.io/nifty-vid/','_blank','noopener');
-    $('sceneImageStatus').textContent='AI موشن ٹول کھل گیا ہے۔ اس سین کی تصویر اپلوڈ کریں؛ ویڈیو پرامپٹ کاپی کیا گیا ہے۔';
-   };
-   card.append(motion);
+
    $('sceneImageGallery').append(card);
    completed++;
   }
@@ -497,4 +493,88 @@ $('makeSceneImages').onclick=async()=>{
  }finally{button.disabled=false}
 };
 $('save').onclick=()=>{if(!lastResult){$('status').textContent='ابھی کوئی AI نتیجہ موجود نہیں۔';return}const b=new Blob([JSON.stringify(lastResult,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='musex-production-plan.json';a.click();URL.revokeObjectURL(a.href)};
-</script></body></html>
+</script>
+<script>
+(()=>{
+ const $=id=>document.getElementById(id);
+ const duration=$('wanDuration'),steps=$('wanSteps');
+ duration.addEventListener('input',()=> $('wanDurationValue').textContent=duration.value);
+ steps.addEventListener('input',()=> $('wanStepsValue').textContent=steps.value);
+ let selectedImage=null,wanObjectUrl=null;
+ $('wanImage').addEventListener('change',()=>{
+  selectedImage=$('wanImage').files?.[0]||null;
+  if(wanObjectUrl)URL.revokeObjectURL(wanObjectUrl);
+  if(selectedImage){
+   wanObjectUrl=URL.createObjectURL(selectedImage);
+   $('wanPreview').src=wanObjectUrl;$('wanPreview').style.display='block';
+  }else $('wanPreview').style.display='none';
+ });
+ function parseSseEvent(raw){
+  let name='message';const lines=[];
+  for(const line of raw.split('\n')){
+   if(line.startsWith('event:'))name=line.slice(6).trim();
+   else if(line.startsWith('data:'))lines.push(line.slice(5).trim());
+  }
+  return lines.length?{name,data:lines.join('\n')}:null;
+ }
+ function videoUrl(file){
+  const base='https://cbensimon-wan2-2-fp8da-aoti-preview2.hf.space';
+  if(typeof file==='string')return base+'/gradio_api/file='+file;
+  if(file&&typeof file==='object')return file.url||(file.path?base+'/gradio_api/file='+file.path:null);
+  return null;
+ }
+ async function readSse(stream){
+  const reader=stream.getReader(),decoder=new TextDecoder();let buffer='';
+  while(true){
+   const {value,done}=await reader.read();
+   if(done)break;
+   buffer+=decoder.decode(value,{stream:true});
+   const parts=buffer.split('\n\n');buffer=parts.pop()||'';
+   for(const raw of parts){
+    const event=parseSseEvent(raw);if(!event)continue;
+    if(event.name==='error'){
+     let msg=event.data;try{const p=JSON.parse(msg);if(typeof p==='string')msg=p}catch{}
+     throw new Error(msg||'Wan 2.2 upstream error');
+    }
+    if(event.name==='complete'){
+     let payload;try{payload=JSON.parse(event.data)}catch{throw new Error('Wan 2.2 نے ناقابلِ مطالعہ نتیجہ واپس کیا۔')}
+     const url=videoUrl(Array.isArray(payload)?payload[0]:null);
+     if(!url)throw new Error('ویڈیو مکمل ہوئی مگر MP4 لنک نہیں ملا۔');
+     return url;
+    }
+   }
+  }
+  throw new Error('کنکشن ویڈیو مکمل ہونے سے پہلے بند ہوگیا۔ دوبارہ کوشش کریں۔');
+ }
+ $('wanGenerate').onclick=async()=>{
+  const button=$('wanGenerate'),status=$('wanStatus');
+  const endpoint=$('endpoint').value.trim().replace(/\/$/,'');
+  const prompt=$('wanPrompt').value.trim();
+  if(!selectedImage){status.textContent='پہلے ایک تصویر منتخب کریں۔';return}
+  if(selectedImage.size>8*1024*1024){status.textContent='تصویر 8 MB سے بڑی ہے؛ اسے compress کریں۔';return}
+  if(!prompt){status.textContent='موشن پرامپٹ لکھیں۔';return}
+  if(!endpoint){status.textContent='Backend URL درج کریں۔';return}
+  button.disabled=true;$('wanResult').style.display='none';$('wanDownload').style.display='none';
+  status.textContent='تصویر Wan 2.2 GPU queue میں بھیجی جا رہی ہے؛ پہلی بار 1–2 منٹ یا زیادہ لگ سکتے ہیں۔';
+  let loadingIndex=0;
+  const messages=['تصویر اپلوڈ ہو رہی ہے...','مفت GPU queue کا انتظار...','Wan 2.2 ماڈل تیار ہو رہا ہے...','ویڈیو کے فریم بن رہے ہیں...','MP4 نتیجہ تیار ہو رہا ہے...'];
+  const loadingTimer=setInterval(()=>{loadingIndex=Math.min(loadingIndex+1,messages.length-1);status.textContent=messages[loadingIndex]},8000);
+  try{
+   const form=new FormData();form.append('image',selectedImage,selectedImage.name||'input.png');
+   form.append('params',JSON.stringify({prompt,duration_seconds:Number(duration.value),steps:Number(steps.value)}));
+   const response=await fetch(endpoint+'/wan22/generate',{method:'POST',body:form});
+   if(!response.ok||!response.body){
+    let message=response.status+' '+response.statusText;
+    try{const data=await response.json();message=data.error||message}catch{}
+    throw new Error(message);
+   }
+   const url=await readSse(response.body);
+   $('wanResult').src=url;$('wanResult').style.display='block';
+   $('wanDownload').href=url;$('wanDownload').style.display='inline-block';
+   status.textContent='مکمل! Wan 2.2 نے حقیقی موشن ویڈیو تیار کر دی۔';
+  }catch(error){status.textContent='Wan 2.2 ویڈیو نہیں بن سکی: '+(error.message||String(error))+'۔ GPU queue یا Space عارضی طور پر unavailable ہو سکتی ہے۔'}
+  finally{clearInterval(loadingTimer);button.disabled=false}
+ };
+})();
+</script>
+</body></html>
