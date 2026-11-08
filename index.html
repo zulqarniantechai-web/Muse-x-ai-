@@ -40,7 +40,9 @@ small{color:#5b6878}.status{font-weight:bold;color:#145c37}
 <p><small>اپنے موبائل کی Gallery سے سینز کی تصاویر منتخب کریں۔ یہ انہیں ترتیب وار ایک خاموش slideshow ویڈیو میں جوڑے گا۔</small></p>
 <label for="videoImages">سینز کی تصاویر منتخب کریں</label>
 <input id="videoImages" type="file" accept="image/*" multiple>
-<button id="makeSlideshow">ویڈیو بنائیں</button>
+<label style="display:flex;align-items:center;gap:9px;font-weight:normal"><input id="splitGrid" type="checkbox" checked style="width:auto"> اگر تصویر 2×2 گرڈ ہے تو اسے چار الگ شاٹس میں تقسیم کریں</label>
+<small>ہر شاٹ میں 3D-style کیمرہ زاویہ، سائیڈ موومنٹ، گہرائی، روشنی، دھند اور متحرک ذرات شامل ہوں گے۔ یہ حقیقی AI کرداروں کی باڈی اینیمیشن نہیں ہے۔</small>
+<button id="makeSlideshow">موشن ویڈیو بنائیں</button>
 <p id="videoStatus" class="status" aria-live="polite"></p>
 <button id="downloadVideo" class="secondary" style="display:none">ویڈیو ڈاؤن لوڈ کریں</button>
 <hr style="border:0;border-top:1px solid #dce3ed;margin:20px 0">
@@ -126,15 +128,24 @@ $('makeSlideshow').onclick=async()=>{
   if(!files.length)throw new Error('پہلے Gallery سے تصاویر منتخب کریں۔');
   if(!window.MediaRecorder)throw new Error('آپ کے براؤزر میں MediaRecorder دستیاب نہیں۔ تازہ Chrome استعمال کریں۔');
   if(!HTMLCanvasElement.prototype.captureStream)throw new Error('آپ کے براؤزر میں Canvas video recording دستیاب نہیں۔ تازہ Chrome استعمال کریں۔');
-  status.textContent='منتخب تصاویر: '+files.length+' — تصاویر لوڈ ہو رہی ہیں...';
+  status.textContent='منتخب تصاویر: '+files.length+' — تصاویر لوڈ اور شاٹس میں تقسیم ہو رہی ہیں...';
+  const sourceUrls=[];
   for(let i=0;i<files.length;i++){
-   const url=URL.createObjectURL(files[i]),img=new Image();
+   const url=URL.createObjectURL(files[i]),img=new Image();sourceUrls.push(url);
    await new Promise((resolve,reject)=>{
     img.onload=resolve;
     img.onerror=()=>reject(new Error('تصویر '+(i+1)+' نہیں کھل سکی۔ اسے JPG یا PNG میں دوبارہ منتخب کریں۔'));
     img.src=url;
    });
-   loaded.push({img,url});
+   if($('splitGrid').checked){
+    const cw=Math.floor(img.naturalWidth/2),ch=Math.floor(img.naturalHeight/2);
+    for(let q=0;q<4;q++){
+     const panel=document.createElement('canvas');panel.width=cw;panel.height=ch;
+     const pctx=panel.getContext('2d');
+     pctx.drawImage(img,(q%2)*cw,Math.floor(q/2)*ch,cw,ch,0,0,cw,ch);
+     loaded.push({img:panel});
+    }
+   }else loaded.push({img});
   }
   const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=720;
   const ctx=canvas.getContext('2d');
@@ -153,19 +164,38 @@ $('makeSlideshow').onclick=async()=>{
   const total=loaded.length*duration-(loaded.length-1)*transition;
   const drawImage=(img,progress,alpha=1,variant=0,now=0)=>{
    const cw=canvas.width,ch=canvas.height;
+   const direction=variant%2?1:-1;
    ctx.save();ctx.globalAlpha=alpha;
-   ctx.filter='blur(22px) brightness(.35)';
-   const bgScale=Math.max(cw/img.width,ch/img.height)*1.2;
+   // Moving blurred environment layer creates a depth/parallax backdrop.
+   ctx.filter='blur(26px) brightness(.30) saturate(1.25)';
+   const bgScale=Math.max(cw/img.width,ch/img.height)*1.32;
    const bw=img.width*bgScale,bh=img.height*bgScale;
-   ctx.drawImage(img,(cw-bw)/2,(ch-bh)/2,bw,bh);
+   const driftX=Math.sin(now*.00042+variant)*34;
+   const driftY=Math.cos(now*.00031+variant)*22;
+   ctx.drawImage(img,(cw-bw)/2-driftX,(ch-bh)/2-driftY,bw,bh);
    ctx.filter='none';
+   // Cinematic virtual camera: dolly, orbit, roll and perspective-like shear.
    const base=Math.max(cw/img.width,ch/img.height);
-   const zoom=1.07+progress*.13;
+   const beat=progress*Math.PI*2;
+   const zoom=1.10+Math.sin(progress*Math.PI)*.13;
    const w=img.width*base*zoom,h=img.height*base*zoom;
-   const pan=Math.sin(progress*Math.PI*1.5+variant)*55;
-   const tilt=Math.cos(progress*Math.PI*1.3+variant)*28;
-   const shake=(Math.sin(now*.035)+Math.sin(now*.061))*2;
-   ctx.drawImage(img,(cw-w)/2+pan+shake,(ch-h)/2+tilt,w,h);
+   const pan=direction*(progress-.5)*105+Math.sin(beat+variant)*18;
+   const rise=Math.sin(beat*.7+variant)*24;
+   const roll=Math.sin(beat+variant)*.035*direction;
+   const shear=Math.sin(beat*.8+variant)*.045*direction;
+   const shake=(Math.sin(now*.035+variant)+Math.sin(now*.061+variant))*1.6;
+   ctx.translate(cw/2+pan+shake,ch/2+rise);
+   ctx.rotate(roll);
+   ctx.transform(1,shear,-shear*.55,1,0,0);
+   ctx.shadowColor='rgba(0,0,0,.55)';ctx.shadowBlur=34;ctx.shadowOffsetY=18;
+   ctx.drawImage(img,-w/2,-h/2,w,h);
+   ctx.shadowBlur=0;ctx.shadowOffsetY=0;
+   // Subtle animated edge light adds dimensional separation.
+   const edge=ctx.createLinearGradient(-w/2,0,w/2,0);
+   edge.addColorStop(0,'rgba(120,190,255,.13)');
+   edge.addColorStop(.5,'rgba(255,255,255,0)');
+   edge.addColorStop(1,'rgba(120,190,255,.08)');
+   ctx.fillStyle=edge;ctx.fillRect(-w/2,-h/2,w,h);
    ctx.restore();
   };
   const drawEffects=now=>{
@@ -183,9 +213,17 @@ $('makeSlideshow').onclick=async()=>{
    const v=ctx.createRadialGradient(cw/2,ch/2,ch*.2,cw/2,ch/2,ch*.8);
    v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.62)');
    ctx.fillStyle=v;ctx.fillRect(0,0,cw,ch);
-   for(let i=0;i<35;i++){
-    ctx.fillStyle='rgba(255,255,255,.09)';
-    ctx.fillRect((i*197+now*.1)%cw,(i*113+now*.07)%ch,2,2);
+   // Floating dust, drifting fog and rain-like foreground streaks.
+   for(let i=0;i<70;i++){
+    const x=(i*197+now*(.025+(i%4)*.012))%cw;
+    const y=(i*113+now*(.018+(i%5)*.009))%ch;
+    ctx.fillStyle='rgba(220,235,255,'+(.07+(i%4)*.025)+')';
+    ctx.beginPath();ctx.arc(x,y,1+(i%3)*.65,0,Math.PI*2);ctx.fill();
+   }
+   for(let i=0;i<22;i++){
+    const x=(i*83+now*.16)%cw,y=(i*149+now*.42)%ch;
+    ctx.strokeStyle='rgba(190,215,240,.12)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-5,y+19);ctx.stroke();
    }
    ctx.restore();
   };
@@ -208,7 +246,7 @@ $('makeSlideshow').onclick=async()=>{
    ctx.fillStyle=grad;ctx.fillRect(0,0,canvas.width,canvas.height);
    ctx.fillStyle='#fff';ctx.font='bold 25px Arial';
    ctx.fillText('MUSE-X AI  •  SCENE '+(sceneIndex+1),42,canvas.height-38);
-   status.textContent='ویڈیو بن رہی ہے: سین '+(sceneIndex+1)+' / '+loaded.length;
+   status.textContent='3D-style موشن شاٹ '+(sceneIndex+1)+' / '+loaded.length;
    if(elapsed>=total){
     clearInterval(timer);timer=null;
     if(recorder.state==='recording')recorder.stop();
@@ -225,13 +263,13 @@ $('makeSlideshow').onclick=async()=>{
   const a=document.createElement('a');a.href=slideshowUrl;a.download='musex-cinematic-motion.webm';a.click();
   $('downloadVideo').style.display='inline-block';
   $('downloadVideo').onclick=()=>{const link=document.createElement('a');link.href=slideshowUrl;link.download='musex-cinematic-motion.webm';link.click()};
-  status.textContent='مکمل! ویڈیو تیار ہوگئی۔ نیچے ڈاؤن لوڈ بٹن بھی موجود ہے۔';
+  status.textContent='مکمل! موشن شاٹس، کیمرہ زاویے، گہرائی اور متحرک ایفیکٹس کے ساتھ ویڈیو تیار ہوگئی۔';
  }catch(e){
   status.textContent='ویڈیو نہیں بن سکی: '+(e.message||String(e));
  }finally{
   if(timer)clearInterval(timer);
   if(stream)stream.getTracks().forEach(t=>t.stop());
-  loaded.forEach(x=>URL.revokeObjectURL(x.url));
+  sourceUrls.forEach(u=>URL.revokeObjectURL(u));
   button.disabled=false;
  }
 };
