@@ -47,6 +47,43 @@ export default {
       });
     }
 
+    if (url.pathname === "/generate-image" && request.method === "POST") {
+      if (!env.AI || typeof env.AI.run !== "function") {
+        return response({ error: "Cloudflare Workers AI binding is missing." }, 503);
+      }
+      try {
+        const body = await request.json();
+        const prompt = body.prompt;
+        if (typeof prompt !== "string" || !prompt.trim()) {
+          return response({ error: "Please provide an image prompt." }, 400);
+        }
+        if (prompt.length > 2048) {
+          return response({ error: "Image prompt is too long. Maximum 2,048 characters." }, 413);
+        }
+        const result = await env.AI.run("@cf/black-forest-labs/flux-1-schnell", {
+          prompt: prompt.trim(),
+          steps: 4,
+        });
+        if (!result || typeof result.image !== "string") {
+          return response({ error: "The image model returned no image. Please try again." }, 502);
+        }
+        return response({
+          success: true,
+          image: "data:image/jpeg;charset=utf-8;base64," + result.image,
+          model: "@cf/black-forest-labs/flux-1-schnell",
+        });
+      } catch (error) {
+        const message = error?.message || "Image generation failed";
+        const quota = /limit|quota|daily|exceed/i.test(message);
+        return response({
+          error: message,
+          note: quota
+            ? "The free daily Workers AI allowance may have been reached. No paid fallback is configured."
+            : "Image generation is temporarily unavailable. Please try again later.",
+        }, quota ? 429 : 500);
+      }
+    }
+
     if (url.pathname !== "/analyze" || request.method !== "POST") {
       return response({ error: "Route not found" }, 404);
     }
