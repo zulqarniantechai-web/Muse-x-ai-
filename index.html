@@ -121,7 +121,7 @@ $('makeSlideshow').onclick=async()=>{
  status.textContent='ویڈیو بنانے کا عمل شروع ہو رہا ہے...';
  button.disabled=true;
  $('downloadVideo').style.display='none';
- let loaded=[],stream=null,timer=null,recorder=null,stopped=null;
+ let loaded=[],sourceUrls=[],stream=null,timer=null,recorder=null,stopped=null;
  try{
   const input=$('videoImages');
   const files=Array.from(input.files||[]).filter(f=>f.type&&f.type.startsWith('image/'));
@@ -129,7 +129,7 @@ $('makeSlideshow').onclick=async()=>{
   if(!window.MediaRecorder)throw new Error('آپ کے براؤزر میں MediaRecorder دستیاب نہیں۔ تازہ Chrome استعمال کریں۔');
   if(!HTMLCanvasElement.prototype.captureStream)throw new Error('آپ کے براؤزر میں Canvas video recording دستیاب نہیں۔ تازہ Chrome استعمال کریں۔');
   status.textContent='منتخب تصاویر: '+files.length+' — تصاویر لوڈ اور شاٹس میں تقسیم ہو رہی ہیں...';
-  const sourceUrls=[];
+  sourceUrls=[];
   for(let i=0;i<files.length;i++){
    const url=URL.createObjectURL(files[i]),img=new Image();sourceUrls.push(url);
    await new Promise((resolve,reject)=>{
