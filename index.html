@@ -246,6 +246,18 @@ $('makeSceneImages').onclick=async()=>{
    download.className='secondary';download.textContent='یہ تصویر ڈاؤن لوڈ کریں';
    download.onclick=()=>{const a=document.createElement('a');a.href=data.image;a.download='musex-scene-'+(i+1)+'.jpg';a.click()};
    card.append(heading,img,download);
+   const motion=document.createElement('button');
+   motion.textContent='AI موشن / کردار کی حرکت بنائیں';
+   motion.className='secondary';
+   motion.onclick=()=>{
+    const motionPrompt=(typeof scene.video_prompt==='string'&&scene.video_prompt.trim())
+      ? scene.video_prompt.trim()
+      : 'Animate the character naturally: make the person walk forward with realistic body movement, natural arm and leg motion, subtle facial expression, and cinematic environmental movement. Preserve the same character identity, face, clothing, and scene composition. No morphing, no extra limbs.';
+    try{navigator.clipboard.writeText(motionPrompt)}catch(e){}
+    window.open('https://igorcsis.github.io/nifty-vid/','_blank','noopener');
+    $('sceneImageStatus').textContent='AI موشن ٹول کھل گیا ہے۔ اس سین کی تصویر اپلوڈ کریں؛ ویڈیو پرامپٹ کاپی کیا گیا ہے۔';
+   };
+   card.append(motion);
    $('sceneImageGallery').append(card);
    completed++;
   }
