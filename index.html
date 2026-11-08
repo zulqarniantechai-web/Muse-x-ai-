@@ -84,7 +84,7 @@ $('downloadImage').onclick=()=>{
 };
 $('makeSceneImages').onclick=async()=>{
  const scenes=lastResult?.production_plan?.scenes;
- const endpoint=$('endpoint').value.trim().replace(/\\/$/,'');
+ const endpoint=$('endpoint').value.trim().replace(/[/]+$/,'');
  if(!Array.isArray(scenes)||!scenes.length){
   $('sceneImageStatus').textContent='پہلے اسکرپٹ کا تجزیہ کریں تاکہ سینز تیار ہوں۔';return;
  }
