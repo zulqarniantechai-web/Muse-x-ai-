@@ -7,10 +7,7 @@ const corsHeaders = {
 function response(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json",
-    },
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
 
@@ -44,7 +41,7 @@ export default {
       return response({
         status: "online",
         agent: "MUSE-X AI",
-        version: "1.1.1",
+        version: "1.1.2",
         ai_provider: "Cloudflare Workers AI",
         model: "@cf/google/gemma-4-26b-a4b-it",
       });
@@ -69,9 +66,7 @@ export default {
       }
 
       if (script.length > 30000) {
-        return response({
-          error: "Script is too long. Maximum 30,000 characters.",
-        }, 413);
+        return response({ error: "Script is too long. Maximum 30,000 characters." }, 413);
       }
 
       const aiResult = await env.AI.run("@cf/google/gemma-4-26b-a4b-it", {
@@ -80,40 +75,26 @@ export default {
             role: "system",
             content: `You are MUSE-X, a professional AI video production planning agent.
 Analyze the user's script and return a valid JSON object only. Do not use Markdown fences.
-Include these fields:
-- title
-- genre
-- summary
-- characters
-- strengths
-- issues
-- suggested_edits
-- scenes (each scene must include scene_number, visual_description, image_prompt, video_prompt, voiceover, sound_effects)
-- production_requirements
-- estimated_duration
-- final_script
-
-Make the plan detailed, practical and cinematic. Keep character appearance consistent across scenes. Do not claim that you have generated actual images or videos.`,
+Include: title, genre, summary, characters, strengths, issues, suggested_edits,
+scenes (scene_number, visual_description, image_prompt, video_prompt, voiceover, sound_effects),
+production_requirements, estimated_duration, final_script.
+Make the plan detailed, practical and cinematic. Keep character appearance consistent.
+Do not claim that you generated actual images or videos.`,
           },
-          {
-            role: "user",
-            content: script,
-          },
+          { role: "user", content: script },
         ],
-        max_tokens: 3500,
+        max_tokens: 2000,
         temperature: 0.7,
-      });
+      }, { rejectIfBusy: true });
 
-      const content =
-        typeof aiResult === "string"
-          ? aiResult
-          : aiResult?.response || aiResult?.result?.response || "";
+      const content = typeof aiResult === "string"
+        ? aiResult
+        : aiResult?.response || aiResult?.result?.response || "";
 
       const plan = extractJson(content);
-
       if (!plan) {
         return response({
-          error: "The free AI model returned a response that could not be read as JSON. Please try again with a shorter script.",
+          error: "The AI response could not be read as JSON. Please try again.",
           model_response: content || null,
         }, 502);
       }
@@ -126,13 +107,16 @@ Make the plan detailed, practical and cinematic. Keep character appearance consi
       });
     } catch (error) {
       const message = error?.message || "Internal server error";
-      const status = /limit|quota|daily|exceed/i.test(message) ? 429 : 500;
+      const busy = /busy|capacity|overload|temporarily unavailable/i.test(message);
+      const quota = /limit|quota|daily|exceed/i.test(message);
       return response({
         error: message,
-        note: status === 429
-          ? "The free daily AI allowance may have been reached. No paid fallback is configured."
-          : "MUSE-X AI could not complete the analysis.",
-      }, status);
+        note: busy
+          ? "The free AI service is busy. Please retry later."
+          : quota
+            ? "The free daily AI allowance may have been reached. No paid fallback is configured."
+            : "MUSE-X AI could not complete the analysis.",
+      }, quota ? 429 : busy ? 503 : 500);
     }
   },
 };
