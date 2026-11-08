@@ -16,7 +16,6 @@ function response(data, status = 200) {
 
 function extractJson(text) {
   if (typeof text !== "string") return null;
-
   try {
     return JSON.parse(text);
   } catch {
@@ -45,8 +44,9 @@ export default {
       return response({
         status: "online",
         agent: "MUSE-X AI",
-        version: "1.1.0",
+        version: "1.1.1",
         ai_provider: "Cloudflare Workers AI",
+        model: "@cf/google/gemma-4-26b-a4b-it",
       });
     }
 
@@ -74,7 +74,7 @@ export default {
         }, 413);
       }
 
-      const aiResult = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+      const aiResult = await env.AI.run("@cf/google/gemma-4-26b-a4b-it", {
         messages: [
           {
             role: "system",
