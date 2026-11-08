@@ -49,7 +49,16 @@ small{color:#5b6878}.status{font-weight:bold;color:#145c37}
 <p><small>AI موشن ٹول سے بنائے گئے ویڈیو کلپس یہاں منتخب کریں۔ اختیاری طور پر وائس اوور اور بیک گراؤنڈ میوزک بھی شامل کریں۔ یہ کام اسی موبائل براؤزر میں ہوگا۔</small></p>
 <label for="motionClips">AI موشن ویڈیو کلپس (ترتیب کے مطابق منتخب کریں)</label>
 <input id="motionClips" type="file" accept="video/*" multiple>
-<label for="voiceTrack">وائس اوور (اختیاری)</label>
+<h4>خودکار AI وائس — بغیر آڈیو اپلوڈ کیے</h4>
+<label for="ttsLanguage">وائس کی زبان</label>
+<select id="ttsLanguage" style="width:100%;padding:13px;border:1px solid #cbd5e1;border-radius:9px;font:inherit">
+<option value="hi">ہندی (India) — مردانہ آواز</option>
+<option value="en">US English — آواز</option>
+</select>
+<button id="generateVoice">تمام سینز کی وائس خود بنائیں</button>
+<p id="ttsStatus" class="status" aria-live="polite"></p>
+<audio id="ttsPreview" controls style="display:none;width:100%;margin-top:10px"></audio>
+<label for="voiceTrack">وائس اوور (خودکار وائس بننے پر خود شامل ہوگا؛ دستی اپلوڈ ضروری نہیں)</label>
 <input id="voiceTrack" type="file" accept="audio/*">
 <label for="musicTrack">بیک گراؤنڈ میوزک (اختیاری)</label>
 <input id="musicTrack" type="file" accept="audio/*">
@@ -66,7 +75,7 @@ small{color:#5b6878}.status{font-weight:bold;color:#145c37}
 <section class="card"><small>Backend: Cloudflare Workers AI · مفت استعمال کی حد دستیاب ہونے پر ہی تجزیہ چلے گا۔ کوئی Paid API یا خودکار Paid fallback شامل نہیں۔</small></section>
 </main>
 <script>
-let lastResult=null;
+let lastResult=null; window.lastResult=null;
 const $=id=>document.getElementById(id);
 $('run').onclick=async()=>{
  const script=$('script').value.trim(), endpoint=$('endpoint').value.trim().replace(/\/$/,'');
@@ -76,7 +85,7 @@ $('run').onclick=async()=>{
  try{
   const r=await fetch(endpoint+'/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({script})});
   const data=await r.json();if(!r.ok)throw new Error(data.error||'Backend error');
-  lastResult=data;$('result').textContent=JSON.stringify(data,null,2);$('status').textContent='تجزیہ مکمل ہوگیا۔';
+  lastResult=data;window.lastResult=data;$('result').textContent=JSON.stringify(data,null,2);$('status').textContent='تجزیہ مکمل ہوگیا۔';
  }catch(e){$('status').textContent='خرابی: '+e.message+' — Backend URL اور deployment چیک کریں۔'}
 };
 $('download').onclick=()=>{const b=new Blob([$('script').value],{type:'text/plain;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='musex-script.txt';a.click();URL.revokeObjectURL(a.href)};
@@ -331,6 +340,70 @@ $('composeFinal').onclick=async()=>{
   button.disabled=false;
  }
 };
+
+</script>
+<script type="module">
+const $tts=id=>document.getElementById(id);
+let musexTtsModule=null, musexVoiceUrl=null;
+function musexWav(samples,sampleRate){
+ const buffer=new ArrayBuffer(44+samples.length*2),view=new DataView(buffer);
+ const write=(o,s)=>{for(let i=0;i<s.length;i++)view.setUint8(o+i,s.charCodeAt(i))};
+ write(0,'RIFF');view.setUint32(4,36+samples.length*2,true);write(8,'WAVE');
+ write(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);
+ view.setUint16(22,1,true);view.setUint32(24,sampleRate,true);
+ view.setUint32(28,sampleRate*2,true);view.setUint16(32,2,true);
+ view.setUint16(34,16,true);write(36,'data');view.setUint32(40,samples.length*2,true);
+ for(let i=0;i<samples.length;i++){
+  const s=Math.max(-1,Math.min(1,samples[i]));
+  view.setInt16(44+i*2,s<0?s*32768:s*32767,true);
+ }
+ return new Blob([buffer],{type:'audio/wav'});
+}
+$tts('generateVoice').onclick=async()=>{
+ const button=$tts('generateVoice'),status=$tts('ttsStatus');
+ const scenes=window.lastResult?.production_plan?.scenes;
+ if(!Array.isArray(scenes)||!scenes.length){status.textContent='پہلے اسکرپٹ کا تجزیہ کریں تاکہ سینز اور وائس اوور تیار ہوں۔';return}
+ const lang=$tts('ttsLanguage').value;
+ const voiceId=lang==='hi'?'hi_IN-pratham-medium':'en_US-lessac-medium';
+ const texts=scenes.map((s,i)=>String(s.voiceover||s.narration||s.dialogue||'').trim());
+ if(texts.every(x=>!x)){status.textContent='Production Plan میں voiceover متن موجود نہیں۔';return}
+ button.disabled=true;
+ try{
+  status.textContent='مفت براؤزر وائس انجن لوڈ ہو رہا ہے... پہلی بار لائبریری ڈاؤن لوڈ ہوگی۔';
+  if(!musexTtsModule)musexTtsModule=await import('https://esm.sh/@mintplex-labs/piper-tts-web@1.0.5');
+  const audioContext=new (window.AudioContext||window.webkitAudioContext)();
+  const buffers=[];
+  for(let i=0;i<texts.length;i++){
+   if(!texts[i])continue;
+   status.textContent='سین '+(i+1)+' / '+texts.length+' کی وائس بن رہی ہے... ماڈل پہلی بار ڈاؤن لوڈ ہو سکتا ہے۔';
+   const wav=await musexTtsModule.predict({text:texts[i],voiceId},p=>{
+    if(p&&p.loaded&&p.total)status.textContent='وائس ماڈل ڈاؤن لوڈ: '+Math.round(p.loaded*100/p.total)+'%';
+   });
+   const decoded=await audioContext.decodeAudioData(await wav.arrayBuffer());
+   buffers.push(decoded);
+  }
+  if(!buffers.length)throw new Error('کسی سین کے لیے وائس متن نہیں ملا۔');
+  const rate=audioContext.sampleRate,gap=Math.floor(rate*.35);
+  const total=buffers.reduce((n,b)=>n+b.length,0)+gap*(buffers.length-1);
+  const merged=new Float32Array(total);let offset=0;
+  for(const b of buffers){
+   const channel=b.getChannelData(0);merged.set(channel,offset);offset+=channel.length+gap;
+  }
+  const finalWav=musexWav(merged,rate);
+  const voiceFile=new File([finalWav],'musex-auto-voice.wav',{type:'audio/wav'});
+  const transfer=new DataTransfer();transfer.items.add(voiceFile);
+  $tts('voiceTrack').files=transfer.files;
+  if(musexVoiceUrl)URL.revokeObjectURL(musexVoiceUrl);
+  musexVoiceUrl=URL.createObjectURL(finalWav);
+  $tts('ttsPreview').src=musexVoiceUrl;$tts('ttsPreview').style.display='block';
+  status.textContent='مکمل! خودکار وائس تیار ہوگئی اور Final Video Composer میں خود شامل ہوگئی۔ اب موشن کلپس منتخب کرکے مکمل ویڈیو بنائیں۔';
+  await audioContext.close();
+ }catch(e){
+  status.textContent='وائس تیار نہیں ہوئی: '+(e.message||String(e))+'۔ انٹرنیٹ کنکشن اور ماڈل لوڈنگ چیک کریں۔';
+ }finally{button.disabled=false}
+};
+</script>
+<script>
 $('makeSceneImages').onclick=async()=>{
  const scenes=lastResult?.production_plan?.scenes;
  const endpoint=$('endpoint').value.trim().replace(/[/]+$/,'');
