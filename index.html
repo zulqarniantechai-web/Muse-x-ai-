@@ -120,20 +120,46 @@ $('makeSlideshow').onclick=async()=>{
   const stopped=new Promise(resolve=>recorder.onstop=resolve);
   recorder.start();
   const duration=3600, transition=650, fps=24;
-  const drawImage=(img,progress,alpha=1,variant=0)=>{
+  const drawImage=(img,progress,alpha=1,variant=0,now=0)=>{
    const cw=canvas.width,ch=canvas.height;
    ctx.save();ctx.globalAlpha=alpha;
-   ctx.filter='blur(22px) brightness(.48)';
-   const bgScale=Math.max(cw/img.width,ch/img.height)*1.18;
+   ctx.filter='blur(24px) brightness(.38) saturate(.8)';
+   const bgScale=Math.max(cw/img.width,ch/img.height)*1.22;
    const bw=img.width*bgScale,bh=img.height*bgScale;
    ctx.drawImage(img,(cw-bw)/2,(ch-bh)/2,bw,bh);
    ctx.filter='none';
    const base=Math.max(cw/img.width,ch/img.height);
-   const zoom=1.04+progress*.16;
+   const zoom=1.08+Math.sin(progress*Math.PI)*.12;
    const w=img.width*base*zoom,h=img.height*base*zoom;
-   const drift=(progress-.5)*34*(variant%2?1:-1);
-   const rise=(progress-.5)*20*(variant%2?-1:1);
-   ctx.drawImage(img,(cw-w)/2+drift,(ch-h)/2+rise,w,h);
+   const drift=Math.sin(progress*Math.PI*1.4+variant)*48;
+   const rise=Math.cos(progress*Math.PI*1.2+variant)*25;
+   const shake=(Math.sin(now*.045)+Math.sin(now*.071))*2.2;
+   ctx.drawImage(img,(cw-w)/2+drift+shake,(ch-h)/2+rise,w,h);
+   ctx.restore();
+  };
+  const drawAtmosphere=(now,sceneIndex)=>{
+   const cw=canvas.width,ch=canvas.height;
+   // Moving fog bands
+   ctx.save();
+   for(let i=0;i<4;i++){
+    const x=((now*.018*(i%2?1:-1)+i*390)%(cw+500))-250;
+    const y=ch*(.25+i*.16)+Math.sin(now*.0007+i)*24;
+    const g=ctx.createRadialGradient(x,y,10,x,y,230);
+    g.addColorStop(0,'rgba(170,195,215,.10)');g.addColorStop(1,'rgba(170,195,215,0)');
+    ctx.fillStyle=g;ctx.fillRect(0,0,cw,ch);
+   }
+   // Subtle horror light flicker
+   const flicker=Math.max(0,Math.sin(now*.013+sceneIndex*8)-.94)*.22;
+   ctx.fillStyle='rgba(190,215,255,'+flicker+')';ctx.fillRect(0,0,cw,ch);
+   // Cinematic vignette
+   const v=ctx.createRadialGradient(cw/2,ch/2,ch*.18,cw/2,ch/2,ch*.78);
+   v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,.66)');
+   ctx.fillStyle=v;ctx.fillRect(0,0,cw,ch);
+   // Brief film-grain specks
+   for(let i=0;i<38;i++){
+    const x=(i*197+now*.11)%cw,y=(i*113+now*.07)%ch;
+    ctx.fillStyle='rgba(255,255,255,.10)';ctx.fillRect(x,y,2,2);
+   }
    ctx.restore();
   };
   const total=loaded.length*duration-(loaded.length-1)*transition;
@@ -147,20 +173,24 @@ $('makeSlideshow').onclick=async()=>{
     if(now-last<step){requestAnimationFrame(frame);return}
     last=now;
     const timeline=Math.min(elapsed,total-1);
-    const sceneIndex=Math.min(loaded.length-1,Math.floor(timeline/(duration-transition)));
-    const local=timeline-sceneIndex*(duration-transition);
+    const step=duration-transition;
+    const sceneIndex=Math.min(loaded.length-1,Math.floor(timeline/step));
+    const local=timeline-sceneIndex*step;
     const progress=Math.min(1,Math.max(0,local/duration));
     ctx.fillStyle='#081321';ctx.fillRect(0,0,canvas.width,canvas.height);
-    drawImage(loaded[sceneIndex].img,progress,1,sceneIndex);
-    if(sceneIndex<loaded.length-1&&local>duration-transition){
-     const fade=Math.min(1,(local-(duration-transition))/transition);
-     drawImage(loaded[sceneIndex+1].img,0,fade,sceneIndex+1);
+    drawImage(loaded[sceneIndex].img,progress,1,sceneIndex,elapsed);
+    // Real overlap crossfade during the final part of each scene
+    const fadeStart=step-transition;
+    if(sceneIndex<loaded.length-1&&local>fadeStart){
+     const fade=Math.min(1,(local-fadeStart)/transition);
+     drawImage(loaded[sceneIndex+1].img,0,fade,sceneIndex+1,elapsed);
     }
-    const gradient=ctx.createLinearGradient(0,canvas.height*.65,0,canvas.height);
-    gradient.addColorStop(0,'rgba(0,0,0,0)');gradient.addColorStop(1,'rgba(0,0,0,.72)');
+    drawAtmosphere(elapsed,sceneIndex);
+    const gradient=ctx.createLinearGradient(0,canvas.height*.62,0,canvas.height);
+    gradient.addColorStop(0,'rgba(0,0,0,0)');gradient.addColorStop(1,'rgba(0,0,0,.82)');
     ctx.fillStyle=gradient;ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.fillStyle='#fff';ctx.font='bold 25px Arial';ctx.fillText('MUSE-X AI  •  SCENE '+(sceneIndex+1),42,canvas.height-38);
-    $('videoStatus').textContent='Cinematic موشن ویڈیو بن رہی ہے: سین '+(sceneIndex+1)+' / '+loaded.length;
+    $('videoStatus').textContent='موشن ایفیکٹس اور ٹرانزیشن تیار ہو رہے ہیں: سین '+(sceneIndex+1)+' / '+loaded.length;
     if(elapsed>=total){resolve();return}
     requestAnimationFrame(frame);
    };
@@ -174,7 +204,7 @@ $('makeSlideshow').onclick=async()=>{
   const a=document.createElement('a');a.href=slideshowUrl;a.download='musex-cinematic-motion.webm';a.click();
   $('downloadVideo').style.display='inline-block';
   $('downloadVideo').onclick=()=>{const link=document.createElement('a');link.href=slideshowUrl;link.download='musex-cinematic-motion.webm';link.click()};
-  $('videoStatus').textContent='مکمل! زوم، کیمرہ پین، بیک گراؤنڈ ڈیپتھ اور کراس فیڈ والی موشن ویڈیو تیار ہے۔ یہ حقیقی AI کردار موشن یا مکمل 3D نہیں ہے۔';
+  $('videoStatus').textContent='مکمل! کیمرہ پین، ہلکی شیک، فوگ، لائٹ فلکر، فلم گرین، وینیٹ اور کراس فیڈ والی ویڈیو تیار ہے۔ یہ حقیقی AI کردار موشن یا مکمل 3D نہیں ہے۔';
  }catch(e){
   $('videoStatus').textContent='ویڈیو نہیں بن سکی: '+e.message;
  }finally{
