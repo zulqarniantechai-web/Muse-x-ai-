@@ -1,4 +1,3 @@
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -15,6 +14,25 @@ function response(data, status = 200) {
   });
 }
 
+function extractJson(text) {
+  if (typeof text !== "string") return null;
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start !== -1 && end > start) {
+      try {
+        return JSON.parse(text.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -27,7 +45,8 @@ export default {
       return response({
         status: "online",
         agent: "MUSE-X AI",
-        version: "1.0.0",
+        version: "1.1.0",
+        ai_provider: "Cloudflare Workers AI",
       });
     }
 
@@ -35,20 +54,18 @@ export default {
       return response({ error: "Route not found" }, 404);
     }
 
-    if (!env.OPENAI_API_KEY) {
+    if (!env.AI || typeof env.AI.run !== "function") {
       return response({
-        error: "OPENAI_API_KEY is not configured",
-      }, 500);
+        error: "Cloudflare Workers AI binding is missing. Add the AI binding named AI and redeploy.",
+      }, 503);
     }
 
     try {
       const body = await request.json();
       const script = body.script;
 
-      if (!script || typeof script !== "string") {
-        return response({
-          error: "Please provide a valid script",
-        }, 400);
+      if (!script || typeof script !== "string" || !script.trim()) {
+        return response({ error: "Please provide a valid script" }, 400);
       }
 
       if (script.length > 30000) {
@@ -57,23 +74,13 @@ export default {
         }, 413);
       }
 
-      const aiResponse = await fetch(
-        "https://api.openai.com/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "gpt-4.1-mini",
-            response_format: { type: "json_object" },
-            messages: [
-              {
-                role: "system",
-                content: `You are MUSE-X, a professional AI video production agent.
-Analyze the user's script and return valid JSON only.
-Include:
+      const aiResult = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+        messages: [
+          {
+            role: "system",
+            content: `You are MUSE-X, a professional AI video production planning agent.
+Analyze the user's script and return a valid JSON object only. Do not use Markdown fences.
+Include these fields:
 - title
 - genre
 - summary
@@ -81,60 +88,51 @@ Include:
 - strengths
 - issues
 - suggested_edits
-- scenes (each with scene_number, visual_description, image_prompt, video_prompt, voiceover, sound_effects)
+- scenes (each scene must include scene_number, visual_description, image_prompt, video_prompt, voiceover, sound_effects)
 - production_requirements
 - estimated_duration
 - final_script
 
-Make the production plan detailed, practical and cinematic.
-Do not claim to generate actual images or videos.`,
-              },
-              {
-                role: "user",
-                content: script,
-              },
-            ],
-            temperature: 0.7,
-          }),
-        }
-      );
+Make the plan detailed, practical and cinematic. Keep character appearance consistent across scenes. Do not claim that you have generated actual images or videos.`,
+          },
+          {
+            role: "user",
+            content: script,
+          },
+        ],
+        max_tokens: 3500,
+        temperature: 0.7,
+      });
 
-      const result = await aiResponse.json();
+      const content =
+        typeof aiResult === "string"
+          ? aiResult
+          : aiResult?.response || aiResult?.result?.response || "";
 
-      if (!aiResponse.ok) {
+      const plan = extractJson(content);
+
+      if (!plan) {
         return response({
-          error: result.error?.message || "OpenAI API request failed",
-        }, aiResponse.status);
-      }
-
-      const content = result.choices?.[0]?.message?.content;
-
-      if (!content) {
-        return response({
-          error: "AI returned an empty response",
-        }, 502);
-      }
-
-      let plan;
-
-      try {
-        plan = JSON.parse(content);
-      } catch {
-        return response({
-          error: "Could not read AI response as JSON",
+          error: "The free AI model returned a response that could not be read as JSON. Please try again with a shorter script.",
+          model_response: content || null,
         }, 502);
       }
 
       return response({
         success: true,
         agent: "MUSE-X AI",
+        ai_provider: "Cloudflare Workers AI",
         production_plan: plan,
       });
-
     } catch (error) {
+      const message = error?.message || "Internal server error";
+      const status = /limit|quota|daily|exceed/i.test(message) ? 429 : 500;
       return response({
-        error: error.message || "Internal server error",
-      }, 500);
+        error: message,
+        note: status === 429
+          ? "The free daily AI allowance may have been reached. No paid fallback is configured."
+          : "MUSE-X AI could not complete the analysis.",
+      }, status);
     }
   },
 };
