@@ -85,11 +85,19 @@ Do not claim that you generated actual images or videos.`,
         ],
         max_tokens: 2000,
         temperature: 0.7,
+        response_format: { type: "json_object" },
+        chat_template_kwargs: { enable_thinking: false },
       }, { rejectIfBusy: true });
 
+      // Workers AI model responses can be returned in different object shapes.
+      // Preserve the full result as a fallback instead of assuming .response exists.
       const content = typeof aiResult === "string"
         ? aiResult
-        : aiResult?.response || aiResult?.result?.response || "";
+        : typeof aiResult?.response === "string"
+          ? aiResult.response
+          : typeof aiResult?.result?.response === "string"
+            ? aiResult.result.response
+            : JSON.stringify(aiResult);
 
       const plan = extractJson(content);
       if (!plan) {
