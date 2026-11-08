@@ -36,6 +36,14 @@ small{color:#5b6878}.status{font-weight:bold;color:#145c37}
 <button id="downloadImage" class="secondary" style="display:none">تصویر ڈاؤن لوڈ کریں</button>
 <small>ماڈل: FLUX.1 schnell · مفت روزانہ AI حد کے اندر۔ حد ختم ہونے پر درخواست رک جائے گی؛ کوئی Paid fallback نہیں۔</small>
 <hr style="border:0;border-top:1px solid #dce3ed;margin:20px 0">
+<h3>تصاویر سے ویڈیو بنائیں</h3>
+<p><small>اپنے موبائل کی Gallery سے سینز کی تصاویر منتخب کریں۔ یہ انہیں ترتیب وار ایک خاموش slideshow ویڈیو میں جوڑے گا۔</small></p>
+<label for="videoImages">سینز کی تصاویر منتخب کریں</label>
+<input id="videoImages" type="file" accept="image/*" multiple>
+<button id="makeSlideshow">ویڈیو بنائیں</button>
+<p id="videoStatus" class="status" aria-live="polite"></p>
+<button id="downloadVideo" class="secondary" style="display:none">ویڈیو ڈاؤن لوڈ کریں</button>
+<hr style="border:0;border-top:1px solid #dce3ed;margin:20px 0">
 <h3>ہر سین کی الگ تصویر بنائیں</h3>
 <p><small>پہلے اوپر اسکرپٹ کا تجزیہ مکمل کریں۔ پھر یہ بٹن ہر سین کے image prompt سے الگ تصویر بنائے گا۔ مفت حد ختم ہونے پر مزید تصاویر رک جائیں گی۔</small></p>
 <button id="makeSceneImages">تمام سینز کی تصاویر بنائیں</button>
@@ -81,6 +89,56 @@ $('makeImage').onclick=async()=>{
 $('downloadImage').onclick=()=>{
  if(!generatedImageData)return;
  const a=document.createElement('a');a.href=generatedImageData;a.download='musex-ai-image.jpg';a.click();
+};
+let slideshowUrl=null;
+$('makeSlideshow').onclick=async()=>{
+ const files=Array.from($('videoImages').files||[]).filter(f=>f.type.startsWith('image/'));
+ if(!files.length){$('videoStatus').textContent='پہلے Gallery سے سینز کی تصاویر منتخب کریں۔';return}
+ if(!window.MediaRecorder||!HTMLCanvasElement.prototype.captureStream){
+  $('videoStatus').textContent='یہ براؤزر ویڈیو بنانے کی سہولت سپورٹ نہیں کرتا۔ Chrome میں کوشش کریں۔';return;
+ }
+ const button=$('makeSlideshow');button.disabled=true;
+ $('downloadVideo').style.display='none';
+ $('videoStatus').textContent='تصاویر لوڈ ہو رہی ہیں...';
+ try{
+  const loaded=[];
+  for(const file of files){
+   const url=URL.createObjectURL(file);
+   const img=new Image();
+   await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url});
+   loaded.push({img,url});
+  }
+  const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=720;
+  const ctx=canvas.getContext('2d');
+  const stream=canvas.captureStream(24);
+  const mime=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
+  if(!mime)throw new Error('اس براؤزر میں WebM ویڈیو فارمیٹ دستیاب نہیں۔');
+  const recorder=new MediaRecorder(stream,{mimeType:mime});
+  const chunks=[];
+  recorder.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
+  const stopped=new Promise(resolve=>recorder.onstop=resolve);
+  recorder.start();
+  for(let i=0;i<loaded.length;i++){
+   const img=loaded[i].img;
+   ctx.fillStyle='#101820';ctx.fillRect(0,0,canvas.width,canvas.height);
+   const scale=Math.min(canvas.width/img.width,canvas.height/img.height);
+   const w=img.width*scale,h=img.height*scale;
+   ctx.drawImage(img,(canvas.width-w)/2,(canvas.height-h)/2,w,h);
+   ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,canvas.height-64,canvas.width,64);
+   ctx.fillStyle='#fff';ctx.font='bold 30px Arial';ctx.fillText('MUSE-X AI  |  SCENE '+(i+1),36,canvas.height-22);
+   $('videoStatus').textContent='ویڈیو بن رہی ہے: سین '+(i+1)+' / '+loaded.length;
+   await new Promise(resolve=>setTimeout(resolve,2500));
+  }
+  recorder.stop();await stopped;stream.getTracks().forEach(t=>t.stop());
+  if(slideshowUrl)URL.revokeObjectURL(slideshowUrl);
+  const blob=new Blob(chunks,{type:mime});slideshowUrl=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=slideshowUrl;a.download='musex-scenes-video.webm';a.click();
+  $('downloadVideo').style.display='inline-block';
+  $('downloadVideo').onclick=()=>{const link=document.createElement('a');link.href=slideshowUrl;link.download='musex-scenes-video.webm';link.click()};
+  $('videoStatus').textContent='مکمل! ویڈیو تیار ہے اور ڈاؤن لوڈ شروع ہوگیا۔ یہ خاموش slideshow ویڈیو ہے۔';
+  loaded.forEach(x=>URL.revokeObjectURL(x.url));
+ }catch(e){$('videoStatus').textContent='ویڈیو نہیں بن سکی: '+e.message}
+ finally{button.disabled=false}
 };
 $('makeSceneImages').onclick=async()=>{
  const scenes=lastResult?.production_plan?.scenes;
