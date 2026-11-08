@@ -79,6 +79,47 @@ export default {
       }
     }
 
+
+    if (url.pathname === "/produce" && request.method === "POST") {
+      try {
+        if (!env.AI || typeof env.AI.run !== "function") return response({ success:false, error:"Cloudflare AI binding دستیاب نہیں۔" },503);
+        const body = await request.json();
+        const script = typeof body.script === "string" ? body.script.trim() : "";
+        if (!script) return response({ success:false,error:"اسکرپٹ درج کریں۔" },400);
+        if (script.length > 12000) return response({ success:false,error:"اسکرپٹ 12,000 حروف سے کم رکھیں۔" },413);
+        const planned = await env.AI.run("@cf/google/gemma-4-26b-a4b-it", {
+          messages:[
+            {role:"system",content:"Convert the story into one coherent cinematic text-to-video prompt for a short clip. Preserve the central character, setting, action and story beat. Describe visible motion, camera movement, lighting and cinematic style. No titles, captions or explanations. Return only an English prompt under 180 words."},
+            {role:"user",content:script}
+          ], max_tokens:300, temperature:0.6, chat_template_kwargs:{enable_thinking:false}
+        }, {rejectIfBusy:true});
+        const prompt = typeof planned === "string" ? planned : planned?.choices?.[0]?.message?.content || planned?.response || "";
+        if (!prompt) throw new Error("AI ویڈیو پرامپٹ تیار نہیں کر سکا۔");
+        const base="https://lightricks-ltx-video-distilled.hf.space";
+        const submit=await fetch(base+"/gradio_api/call/text_to_video",{
+          method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({data:[prompt.trim(),"worst quality, blurry, distorted, watermark, text, subtitles","","",512,704,"text-to-video",8,9,42,true,1,true]})
+        });
+        if(!submit.ok) throw new Error("LTX سروس نے درخواست قبول نہیں کی (HTTP "+submit.status+")۔");
+        const job=await submit.json();if(!job.event_id)throw new Error("LTX job ID نہیں ملی۔");
+        const result=await fetch(base+"/gradio_api/call/text_to_video/"+job.event_id,{headers:{"Accept":"text/event-stream"},signal:AbortSignal.timeout(300000)});
+        if(!result.ok)throw new Error("LTX نتیجہ حاصل نہیں ہوا (HTTP "+result.status+")۔");
+        const raw=await result.text();let payload=null,failure=null;
+        for(const block of raw.split("\\n\\n")){
+          const event=block.match(/^event:\\s*(\\S+)/m)?.[1],line=block.match(/^data:\\s*(.+)$/m)?.[1];
+          if(event==="error")failure=line||"LTX generation failed";
+          if(event==="complete"&&line){try{payload=JSON.parse(line)}catch{}}
+        }
+        if(failure)throw new Error("LTX ماڈل کی خرابی: "+failure);
+        const first=Array.isArray(payload)?payload[0]:null;
+        const videoUrl=first?.video?.url||first?.url||(typeof first==="string"?first:null);
+        if(!videoUrl)throw new Error("LTX نے ویڈیو فائل واپس نہیں کی۔");
+        return response({success:true,video_url:videoUrl,model:"LTX-Video distilled"});
+      } catch(error) {
+        return response({success:false,error:error?.message||"ویڈیو نہیں بن سکی۔"},502);
+      }
+    }
+
     if (url.pathname === "/health" && request.method === "GET") {
       return response({
         status: "online",
