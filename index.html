@@ -255,7 +255,7 @@ $('composeFinal').onclick=async()=>{
     const url=URL.createObjectURL(item.file);objectUrls.push(url);
     const audio=new Audio();audio.src=url;audio.loop=item.loop;audio.preload='auto';
     const source=audioCtx.createMediaElementSource(audio);
-    const gain=audioCtx.createGain();gain.gain.value=item.loop?.22:1;
+    const gain=audioCtx.createGain();gain.gain.value=item.loop ? 0.22 : 1;
     source.connect(gain);gain.connect(destination);
     audioEls.push(audio);
    });
