@@ -80,6 +80,37 @@ export default {
     }
 
 
+    // Proxy generated Hugging Face video files through this Worker so the browser
+    // does not fail on cross-origin (CORS) restrictions.
+    if (url.pathname === "/video" && request.method === "GET") {
+      try {
+        const source = url.searchParams.get("url");
+        if (!source) return response({ success: false, error: "Video URL missing." }, 400);
+        const videoUrl = new URL(source);
+        if (videoUrl.protocol !== "https:" || videoUrl.hostname !== "lightricks-ltx-video-distilled.hf.space") {
+          return response({ success: false, error: "Video source is not allowed." }, 400);
+        }
+        const upstreamVideo = await fetch(videoUrl.toString(), {
+          headers: { "Accept": "video/*,application/octet-stream;q=0.9,*/*;q=0.8" },
+          redirect: "follow",
+        });
+        if (!upstreamVideo.ok || !upstreamVideo.body) {
+          return response({ success: false, error: "Hugging Face video file unavailable (HTTP " + upstreamVideo.status + ")." }, 502);
+        }
+        return new Response(upstreamVideo.body, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            "Content-Type": upstreamVideo.headers.get("Content-Type") || "video/mp4",
+            "Content-Disposition": 'inline; filename="musex-video.mp4"',
+            "Cache-Control": "no-store",
+          },
+        });
+      } catch (error) {
+        return response({ success: false, error: error?.message || "Video proxy failed." }, 502);
+      }
+    }
+
     if (url.pathname === "/produce" && request.method === "POST") {
       try {
         if (!env.AI || typeof env.AI.run !== "function") return response({ success:false, error:"Cloudflare AI binding دستیاب نہیں۔" },503);
@@ -114,7 +145,7 @@ export default {
         const first=Array.isArray(payload)?payload[0]:null;
         const videoUrl=first?.video?.url||first?.url||(typeof first==="string"?first:null);
         if(!videoUrl)throw new Error("LTX نے ویڈیو فائل واپس نہیں کی۔");
-        return response({success:true,video_url:videoUrl,model:"LTX-Video distilled"});
+        const proxiedVideoUrl = new URL("/video", url.origin);\n        proxiedVideoUrl.searchParams.set("url", videoUrl);\n        return response({success:true,video_url:proxiedVideoUrl.toString(),model:"LTX-Video distilled"});
       } catch(error) {
         return response({success:false,error:error?.message||"ویڈیو نہیں بن سکی۔"},502);
       }
