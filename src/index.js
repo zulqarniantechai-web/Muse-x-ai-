@@ -145,6 +145,7 @@ export default {
         const first=Array.isArray(payload)?payload[0]:null;
         const videoUrl=first?.video?.url||first?.url||(typeof first==="string"?first:null);
         if(!videoUrl)throw new Error("LTX نے ویڈیو فائل واپس نہیں کی۔");
+        // Build the proxy URL using separate JavaScript statements.
         const proxiedVideoUrl = new URL("/video", url.origin);
         proxiedVideoUrl.searchParams.set("url", videoUrl);
 
