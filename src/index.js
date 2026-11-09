@@ -147,7 +147,12 @@ export default {
         if(!videoUrl)throw new Error("LTX نے ویڈیو فائل واپس نہیں کی۔");
         const proxiedVideoUrl = new URL("/video", url.origin);
         proxiedVideoUrl.searchParams.set("url", videoUrl);
-        return response({success:true,video_url:proxiedVideoUrl.toString(),model:"LTX-Video distilled"});
+
+        return response({
+          success: true,
+          video_url: proxiedVideoUrl.toString(),
+          model: "LTX-Video distilled",
+        });
       } catch(error) {
         return response({success:false,error:error?.message||"ویڈیو نہیں بن سکی۔"},502);
       }
