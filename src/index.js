@@ -145,7 +145,9 @@ export default {
         const first=Array.isArray(payload)?payload[0]:null;
         const videoUrl=first?.video?.url||first?.url||(typeof first==="string"?first:null);
         if(!videoUrl)throw new Error("LTX نے ویڈیو فائل واپس نہیں کی۔");
-        const proxiedVideoUrl = new URL("/video", url.origin);\n        proxiedVideoUrl.searchParams.set("url", videoUrl);\n        return response({success:true,video_url:proxiedVideoUrl.toString(),model:"LTX-Video distilled"});
+        const proxiedVideoUrl = new URL("/video", url.origin);
+        proxiedVideoUrl.searchParams.set("url", videoUrl);
+        return response({success:true,video_url:proxiedVideoUrl.toString(),model:"LTX-Video distilled"});
       } catch(error) {
         return response({success:false,error:error?.message||"ویڈیو نہیں بن سکی۔"},502);
       }
