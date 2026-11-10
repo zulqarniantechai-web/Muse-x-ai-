@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MUSE-X Voice Test</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eef2f7;color:#172033;font-family:Arial,sans-serif}
+header{background:#102744;color:#fff;padding:22px;text-align:center}main{max-width:680px;margin:24px auto;padding:0 15px}
+.card{background:#fff;border:1px solid #dce3ed;border-radius:15px;padding:20px}
+label{display:block;font-weight:700;margin:14px 0 8px}textarea,select{width:100%;padding:13px;border:1px solid #cbd5e1;border-radius:10px;font:16px Arial}
+textarea{min-height:150px;line-height:1.6}button,a.download{display:block;width:100%;border:0;border-radius:10px;background:#1764b1;color:#fff;padding:14px;margin-top:14px;font-size:16px;font-weight:700;text-align:center;text-decoration:none}
+button:disabled{opacity:.55}.status{white-space:pre-wrap;line-height:1.6;color:#24543b}audio{width:100%;margin-top:14px}small{display:block;color:#667487;line-height:1.6;margin-top:14px}
+</style>
+</head>
+<body>
+<header><h1>MUSE-X AI — Voice Test</h1><p>Free browser-based voice test</p></header>
+<main><section class="card">
+<label for="voice">US English voice</label>
+<select id="voice"><option value="en_US-hfc_male-medium">Male — US English</option><option value="en_US-hfc_female-medium">Female — US English</option></select>
+<label for="script">Test text</label>
+<textarea id="script">Hello! This is a voice test from MUSE-X AI. Your video narration will be generated automatically.</textarea>
+<button id="make">Generate voice (first run downloads the voice model)</button>
+<p id="status" class="status" aria-live="polite"></p>
+<audio id="player" controls style="display:none"></audio>
+<a id="download" class="download" download="musex-voice.wav" style="display:none">Download test voice (WAV)</a>
+<small>This page tests speech generation only. It does not change your video or add sound to an MP4 yet. The first model download needs an internet connection and storage space. Hindi/Urdu voice support is not enabled in this test.</small>
+</section></main>
+<script type="module">
+const $=id=>document.getElementById(id);
+let audioUrl=null;
+$('make').addEventListener('click',async()=>{
+ const text=$('script').value.trim(),voiceId=$('voice').value,button=$('make');
+ if(!text){$('status').textContent='Enter some text first.';return}
+ if(text.length>5000){$('status').textContent='Please keep the test under 5,000 characters.';return}
+ button.disabled=true;$('player').style.display='none';$('download').style.display='none';
+ if(audioUrl)URL.revokeObjectURL(audioUrl);
+ $('status').textContent='Loading free voice engine/model and generating speech. First run may take a while...';
+ try{
+  const tts=await import('https://esm.sh/@mintplex-labs/piper-tts-web@1.0.5');
+  const wav=await tts.predict({text,voiceId},p=>{$('status').textContent='Generating voice... '+(p?.loaded&&p?.total?Math.round(p.loaded*100/p.total)+'%':'')});
+  if(!(wav instanceof Blob)||!wav.size)throw new Error('Voice engine returned an empty audio file.');
+  audioUrl=URL.createObjectURL(wav);
+  $('player').src=audioUrl;$('player').style.display='block';
+  $('download').href=audioUrl;$('download').style.display='block';
+  $('status').textContent='Voice generated successfully. Play it above or download the WAV test file.';
+ }catch(e){$('status').textContent='Voice test failed: '+(e?.message||String(e))+'\nTry again on a stable connection. No paid service is used.'}
+ finally{button.disabled=false}
+});
+</script>
+</body></html>
