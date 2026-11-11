@@ -41,7 +41,7 @@ export default {
     if (url.pathname === "/kokoro-file" && request.method === "GET") {
       try {
         const file = url.searchParams.get("file") || "";
-        const allowed = /^(config\.json|tokenizer\.json|tokenizer_config\.json|onnx\/model_q8f16\.onnx|voices\/[a-z0-9_]+\.bin)$/i;
+        const allowed = /^(config\.json|tokenizer\.json|tokenizer_config\.json|onnx\/(model_quantized|model_q8f16)\.onnx|voices\/[a-z0-9_]+\.bin)$/i;
         if (!allowed.test(file) || file.includes("..")) return response({ error: "Kokoro file not allowed." }, 400);
         const upstreamUrl = "https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/" + file;
         const headers = new Headers();
