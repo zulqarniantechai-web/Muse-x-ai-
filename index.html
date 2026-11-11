@@ -45,7 +45,7 @@ $('makeVoice').onclick=async()=>{
   await ffmpeg.load({coreURL:'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',wasmURL:'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm'});
   await ffmpeg.writeFile('input.mp4',new Uint8Array(await currentVideoBlob.arrayBuffer()));
   await ffmpeg.writeFile('voice.wav',new Uint8Array(await wav.arrayBuffer()));
-  const result=await ffmpeg.exec(['-i','input.mp4','-i','voice.wav','-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac'+ '-movflags','+faststart','output.mp4']);
+  const result=await ffmpeg.exec(['-i','input.mp4','-i','voice.wav','-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-movflags','+faststart','output.mp4']);
   if(result!==0)throw Error('FFmpeg MP4 میں آواز شامل نہیں کر سکا۔');
   const out=await ffmpeg.readFile('output.mp4');if(!out||!out.length)throw Error('تیار MP4 فائل خالی ہے۔');
   const finalBlob=new Blob([out],{type:'video/mp4'});if(muxObjectUrl)URL.revokeObjectURL(muxObjectUrl);
