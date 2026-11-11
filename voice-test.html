@@ -50,11 +50,24 @@ $('make').addEventListener('click',async()=>{
  try{
   if(!ttsInstance){
    $('status').textContent='Loading Kokoro library from CDN...';
+   // Route model downloads through our own Worker proxy to avoid browser-side CORS blocks.
+   const originalFetch=window.fetch.bind(window);
+   window.fetch=(input,init)=>{
+    const raw=typeof input==='string'?input:(input&&input.url?input.url:'');
+    try{
+     const target=new URL(raw,location.href);
+     if(target.hostname==='huggingface.co' && target.pathname.startsWith('/onnx-community/Kokoro-82M-v1.0-ONNX/')){
+      const file=target.pathname.replace('/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/','');
+      if(file && !file.includes('..')) return originalFetch('/kokoro-file?file='+encodeURIComponent(file),init);
+     }
+    }catch{}
+    return originalFetch(input,init);
+   };
    let mod;
    try{mod=await import('https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm')}
    catch(first){$('status').textContent='Primary CDN unavailable. Trying backup CDN...';mod=await import('https://esm.sh/kokoro-js@1.2.1?bundle')}
    if(!mod?.KokoroTTS)throw new Error('KokoroTTS export not found in the library.');
-   $('status').textContent='Loading Kokoro neural model. First download may be large...';
+   $('status').textContent='Loading Kokoro neural model through the MUSE-X download bridge. First download may be large...';
    ttsInstance=await mod.KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX',{
     dtype:'q8',device:'wasm',progress_callback:progress
    });
