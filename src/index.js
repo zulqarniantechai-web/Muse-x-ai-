@@ -247,7 +247,7 @@ export default {
             if(wanFailure)throw new Error(wanFailure);
             const wanFirst=Array.isArray(wanPayload)?wanPayload[0]:null;
             let wanVideo=wanFirst?.video?.url||wanFirst?.url||wanFirst?.video?.path||wanFirst?.path||(typeof wanFirst==="string"?wanFirst:null);
-            if(wanVideo&&!wanVideo.startsWith("https://")&&!wanVideo.startsWith("http://"))wanVideo=wanSpace+"/gradio_api/file="+wanVideo.replace(/^\\//,"");
+            if(wanVideo&&!wanVideo.startsWith("https://")&&!wanVideo.startsWith("http://"))wanVideo=wanSpace+"/gradio_api/file="+wanVideo.replace(/^\/+/, "");
             if(!wanVideo)throw new Error("Wan 2.2 returned no video file.");
             const finalUrl=new URL(wanVideo);
             if(finalUrl.hostname!=="cbensimon-wan2-2-fp8da-aoti-preview2.hf.space")throw new Error("Wan 2.2 returned an unexpected video host.");
