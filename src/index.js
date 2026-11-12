@@ -230,7 +230,7 @@ export default {
             const imageData={path:imagePath,url:wanSpace+"/gradio_api/file="+imagePath,orig_name:"musex-wan-start.jpg",size:bytes.length,mime_type:"image/jpeg",meta:{_type:"gradio.FileData"}};
             const wanSubmit=await fetch(wanSpace+"/gradio_api/call/generate_video",{
               method:"POST",headers:{"Content-Type":"application/json"},
-              body:JSON.stringify({data:[imageData,null,prompt.trim(),6,"",3.5,1,1,42,true,6,"UniPCMultistep",3.0,16,false,true]}),
+              body:JSON.stringify({data:[imageData,null,prompt.trim(),4,"色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 风格, 作品, 画作, 画面, 静止, 整体发灰, 最差质量, 低质量, JPEG压缩残留, 丑陋的, 残缺的, 多余的手指, 画得不好的手部, 画得不好的脸部, 畸形的, 毁容的, 形态畸形的肢体, 手指融合, 静止不动的画面, 杂乱的背景, 三条腿, 背景人很多, 倒着走",3.5,1,1,42,true,6,"UniPCMultistep",3.0,16,false,true]}),
               signal:AbortSignal.timeout(60000)
             });
             if(!wanSubmit.ok)throw new Error("Wan 2.2 job submit failed (HTTP "+wanSubmit.status+").");
