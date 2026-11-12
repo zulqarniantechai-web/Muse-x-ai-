@@ -140,8 +140,13 @@
     const labelVoice = lang === "en" ? "VOICE-OVER SCRIPT" : lang === "roman" ? "VOICE-OVER SCRIPT" : "وائس اوور اسکرپٹ";
     const labelEnd = lang === "en" ? "ENDING" : lang === "roman" ? "ENDING" : "اختتام";
     const duration = ({ "30": "30 seconds", "60": "1 minute", "120": "2 minutes", "300": "5 minutes", "600": "10 minutes" })[length];
+    const durationNote = lang === "en"
+      ? "Starter draft only: add more verified facts and examples to reach this duration."
+      : lang === "roman"
+        ? "Yeh sirf starter draft hai; is duration tak pohanchne ke liye mazeed tasdeeq-shuda nuqaat aur misaalein shamil karein."
+        : "یہ ابتدائی ڈرافٹ ہے؛ اس دورانیے تک پہنچنے کے لیے مزید مصدقہ نکات اور مثالیں شامل کریں۔";
 
-    return title + "\nTarget length: " + duration + " (approximate)\n\n" +
+    return title + "\nTarget length: " + duration + " (approximate)\n" + durationNote + "\n\n" +
       labelHook + "\n" + pack.hook(topic) + "\n\n" +
       labelVoice + "\n" + body + "\n\n" +
       labelEnd + "\n" + pack.close + " " + platformCta(platform, lang);
