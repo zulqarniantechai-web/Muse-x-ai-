@@ -14,3 +14,6 @@ The `/produce` route tries LTX first. If LTX fails, it can optionally:
 To enable only after that review, set the Worker environment variable `WAN22_FALLBACK_ENABLED=true` in the Cloudflare Worker settings, then redeploy. Leave it unset or set to any value other than `true` to keep the fallback off. This feature has not been production-tested against live generation; validate it with a short non-commercial test first.
 
 The official Wan 2.2 TI2V-5B model card identifies the model weights as Apache-2.0 and documents a 24 GB GPU requirement for the published local inference path: https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B
+
+**ZeroGPU quota note:** this Worker does not send a Hugging Face access token, so requests use the unauthenticated ZeroGPU allowance. Hugging Face currently documents a 2-minute daily GPU quota for unauthenticated use; availability and queue priority can vary. This is not a guaranteed unlimited free production backend. See https://huggingface.co/docs/hub/main/en/spaces-zerogpu.
+
