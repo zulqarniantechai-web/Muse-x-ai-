@@ -190,7 +190,7 @@ export default {
           if(!result.ok)throw new Error("LTX result unavailable (HTTP "+result.status+").");
           const raw=await result.text();let payload=null,failure=null;
           for(const block of raw.split("\n\n")){
-            const event=block.match(/^event:\\s*(\\S+)/m)?.[1],line=block.match(/^data:\\s*(.+)$/m)?.[1];
+            const event=block.match(/^event:\s*(\S+)/m)?.[1],line=block.match(/^data:\s*(.+)$/m)?.[1];
             if(event==="error")failure=line||"LTX generation failed";
             if(event==="complete"&&line){try{payload=JSON.parse(line)}catch{}}
           }
@@ -240,14 +240,14 @@ export default {
             if(!wanResult.ok)throw new Error("Wan 2.2 result stream failed (HTTP "+wanResult.status+").");
             const wanRaw=await wanResult.text();let wanPayload=null,wanFailure=null;
             for(const block of wanRaw.split("\n\n")){
-              const event=block.match(/^event:\\s*(\\S+)/m)?.[1],line=block.match(/^data:\\s*(.+)$/m)?.[1];
+              const event=block.match(/^event:\s*(\S+)/m)?.[1],line=block.match(/^data:\s*(.+)$/m)?.[1];
               if(event==="error")wanFailure=line||"Wan 2.2 generation failed";
               if(event==="complete"&&line){try{wanPayload=JSON.parse(line)}catch{}}
             }
             if(wanFailure)throw new Error(wanFailure);
             const wanFirst=Array.isArray(wanPayload)?wanPayload[0]:null;
             let wanVideo=wanFirst?.video?.url||wanFirst?.url||wanFirst?.video?.path||wanFirst?.path||(typeof wanFirst==="string"?wanFirst:null);
-            if(wanVideo&&!/^https?:\\/\\//i.test(wanVideo))wanVideo=wanSpace+"/gradio_api/file="+wanVideo.replace(/^\\//,"");
+            if(wanVideo&&!wanVideo.startsWith("https://")&&!wanVideo.startsWith("http://"))wanVideo=wanSpace+"/gradio_api/file="+wanVideo.replace(/^\\//,"");
             if(!wanVideo)throw new Error("Wan 2.2 returned no video file.");
             const finalUrl=new URL(wanVideo);
             if(finalUrl.hostname!=="cbensimon-wan2-2-fp8da-aoti-preview2.hf.space")throw new Error("Wan 2.2 returned an unexpected video host.");
