@@ -29,6 +29,59 @@ function extractJson(text) {
   }
 }
 
+
+function parseGradioStream(raw, serviceName) {
+  const normalized = String(raw || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  let payload = null;
+  let failure = null;
+  let completed = false;
+  for (const block of normalized.split(/\n\n+/)) {
+    let event = "";
+    const dataLines = [];
+    for (const line of block.split("\n")) {
+      if (line.startsWith("event:")) event = line.slice(6).trim();
+      else if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
+    }
+    const data = dataLines.join("\n");
+    if (event === "error") failure = data || serviceName + " generation failed.";
+    if (event === "complete") {
+      completed = true;
+      try { payload = JSON.parse(data); }
+      catch { throw new Error(serviceName + " returned an unreadable completion event."); }
+    }
+  }
+  if (failure) throw new Error(serviceName + " error: " + failure);
+  if (!completed || payload === null) throw new Error(serviceName + " stream ended without a completion event.");
+  return payload;
+}
+
+const ALLOWED_VIDEO_HOSTS = new Set([
+  "lightricks-ltx-video-distilled.hf.space",
+  "cbensimon-wan2-2-fp8da-aoti-preview2.hf.space",
+]);
+
+function validateVideoUrl(value) {
+  const parsed = new URL(value);
+  if (parsed.protocol !== "https:" || !ALLOWED_VIDEO_HOSTS.has(parsed.hostname) ||
+      (parsed.port && parsed.port !== "443") || parsed.username || parsed.password) {
+    throw new Error("Video source is not allowed.");
+  }
+  return parsed;
+}
+
+async function fetchAllowedVideo(value, init = {}, maxRedirects = 3) {
+  let current = validateVideoUrl(value);
+  for (let redirects = 0; redirects <= maxRedirects; redirects++) {
+    const result = await fetch(current.toString(), { ...init, redirect: "manual" });
+    if (![301, 302, 303, 307, 308].includes(result.status)) return result;
+    const location = result.headers.get("Location");
+    if (!location) throw new Error("Video host returned a redirect without a location.");
+    if (redirects === maxRedirects) throw new Error("Video host exceeded the redirect limit.");
+    current = validateVideoUrl(new URL(location, current).toString());
+  }
+  throw new Error("Video redirect could not be completed.");
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -97,13 +150,16 @@ export default {
         const rawParams = form.get("params");
         if (!(image instanceof File)) return response({ error: "ایک تصویر اپلوڈ کریں۔" }, 400);
         if (image.size > 8 * 1024 * 1024) return response({ error: "تصویر 8 MB یا اس سے کم ہونی چاہیے۔" }, 413);
+        if (!["image/png", "image/jpeg", "image/webp"].includes(image.type)) {
+          return response({ error: "صرف PNG، JPEG یا WebP تصویر اپلوڈ کریں۔" }, 415);
+        }
         let params = {};
         try { params = typeof rawParams === "string" ? JSON.parse(rawParams) : {}; } catch {}
         const prompt = typeof params.prompt === "string" ? params.prompt.trim() : "";
         if (!prompt) return response({ error: "Motion Prompt درج کریں۔" }, 400);
         if (prompt.length > 2000) return response({ error: "Motion Prompt زیادہ لمبا ہے؛ 2,000 حروف تک رکھیں۔" }, 413);
         const space = "https://cbensimon-wan2-2-fp8da-aoti-preview2.hf.space";
-        const uploaded = await fetch(space + "/gradio_api/upload", { method: "POST", body: (() => { const f = new FormData(); f.append("files", image, image.name || "input.png"); return f; })() });
+        const uploaded = await fetch(space + "/gradio_api/upload", { method: "POST", body: (() => { const f = new FormData(); f.append("files", image, image.name || "input.png"); return f; })(), signal: AbortSignal.timeout(60000) });
         if (!uploaded.ok) throw new Error("تصویر Wan 2.2 Space پر اپلوڈ نہیں ہوئی (" + uploaded.status + ")۔ Space سو رہی یا مصروف ہو سکتی ہے۔");
         const paths = await uploaded.json();
         if (!Array.isArray(paths) || !paths[0]) throw new Error("Wan 2.2 image upload کا جواب درست نہیں۔");
@@ -118,12 +174,12 @@ export default {
           1, 1, 42, true, 6, "UniPCMultistep", 3.0, 16, false, true
         ];
         const submit = await fetch(space + "/gradio_api/call/generate_video", {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data })
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data }), signal: AbortSignal.timeout(60000)
         });
         if (!submit.ok) throw new Error("Wan 2.2 generation job جمع نہیں ہوا (" + submit.status + ")۔");
         const job = await submit.json();
         if (!job.event_id) throw new Error("Wan 2.2 نے generation event ID واپس نہیں کی۔");
-        const upstream = await fetch(space + "/gradio_api/call/generate_video/" + job.event_id, { headers: { "Accept": "text/event-stream" } });
+        const upstream = await fetch(space + "/gradio_api/call/generate_video/" + job.event_id, { headers: { "Accept": "text/event-stream" }, signal: AbortSignal.timeout(300000) });
         if (!upstream.ok || !upstream.body) throw new Error("Wan 2.2 result stream نہیں کھل سکی (" + upstream.status + ")۔");
         return new Response(upstream.body, { status: 200, headers: { ...corsHeaders, "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no" } });
       } catch (error) {
@@ -138,13 +194,14 @@ export default {
       try {
         const source = url.searchParams.get("url");
         if (!source) return response({ success: false, error: "Video URL missing." }, 400);
-        const videoUrl = new URL(source);
-        if (videoUrl.protocol !== "https:" || videoUrl.hostname !== "lightricks-ltx-video-distilled.hf.space") {
+        try {
+          validateVideoUrl(source);
+        } catch {
           return response({ success: false, error: "Video source is not allowed." }, 400);
         }
-        const upstreamVideo = await fetch(videoUrl.toString(), {
+        const upstreamVideo = await fetchAllowedVideo(source, {
           headers: { "Accept": "video/*,application/octet-stream;q=0.9,*/*;q=0.8" },
-          redirect: "follow",
+          signal: AbortSignal.timeout(300000),
         });
         if (!upstreamVideo.ok || !upstreamVideo.body) {
           return response({ success: false, error: "Hugging Face video file unavailable (HTTP " + upstreamVideo.status + ")." }, 502);
@@ -179,33 +236,76 @@ export default {
         const prompt = typeof planned === "string" ? planned : planned?.choices?.[0]?.message?.content || planned?.response || "";
         if (!prompt) throw new Error("AI ویڈیو پرامپٹ تیار نہیں کر سکا۔");
         const base="https://lightricks-ltx-video-distilled.hf.space";
-        const submit=await fetch(base+"/gradio_api/call/text_to_video",{
-          method:"POST",headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({data:[prompt.trim(),"worst quality, blurry, distorted, watermark, text, subtitles","","",512,704,"text-to-video",8,9,42,true,1,true]})
-        });
-        if(!submit.ok) throw new Error("LTX سروس نے درخواست قبول نہیں کی (HTTP "+submit.status+")۔");
-        const job=await submit.json();if(!job.event_id)throw new Error("LTX job ID نہیں ملی۔");
-        const result=await fetch(base+"/gradio_api/call/text_to_video/"+job.event_id,{headers:{"Accept":"text/event-stream"},signal:AbortSignal.timeout(300000)});
-        if(!result.ok)throw new Error("LTX نتیجہ حاصل نہیں ہوا (HTTP "+result.status+")۔");
-        const raw=await result.text();let payload=null,failure=null;
-        for(const block of raw.split("\n\n")){
-          const event=block.match(/^event:\s*(\S+)/m)?.[1],line=block.match(/^data:\s*(.+)$/m)?.[1];
-          if(event==="error")failure=line||"LTX generation failed";
-          if(event==="complete"&&line){try{payload=JSON.parse(line)}catch{}}
+        try {
+          const submit=await fetch(base+"/gradio_api/call/text_to_video",{
+            method:"POST",headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({data:[prompt.trim(),"worst quality, blurry, distorted, watermark, text, subtitles","","",512,704,"text-to-video",8,9,42,true,1,true]}),
+            signal:AbortSignal.timeout(60000)
+          });
+          if(!submit.ok) throw new Error("LTX service rejected the job (HTTP "+submit.status+").");
+          const job=await submit.json();if(!job.event_id)throw new Error("LTX job ID missing.");
+          const result=await fetch(base+"/gradio_api/call/text_to_video/"+job.event_id,{headers:{"Accept":"text/event-stream"},signal:AbortSignal.timeout(300000)});
+          if(!result.ok)throw new Error("LTX result unavailable (HTTP "+result.status+").");
+          const raw=await result.text();
+          const payload=parseGradioStream(raw,"LTX");
+          const first=Array.isArray(payload)?payload[0]:null;
+          const videoUrl=first?.video?.url||first?.url||(typeof first==="string"?first:null);
+          if(!videoUrl)throw new Error("LTX returned no video file.");
+          const proxiedVideoUrl = new URL("/video", url.origin);
+          proxiedVideoUrl.searchParams.set("url", videoUrl);
+          return response({success:true,video_url:proxiedVideoUrl.toString(),model:"LTX-Video distilled",fallback_used:false});
+        } catch(ltxError) {
+          // Do not use a hosted demo for monetized production until its service terms are reviewed.
+          if (env.WAN22_FALLBACK_ENABLED !== "true") {
+            return response({
+              success:false,
+              error:ltxError?.message||"LTX generation failed.",
+              fallback_available:true,
+              fallback_model:"Wan 2.2 (hosted Space-selected variant)",
+              fallback_enabled:false,
+              note:"Wan 2.2 model weights are Apache-2.0, but the public demo Space's service terms and free quota need review before enabling it for monetized production."
+            },502);
+          }
+          const wanSpace="https://cbensimon-wan2-2-fp8da-aoti-preview2.hf.space";
+          try {
+            const imageResult=await env.AI.run("@cf/black-forest-labs/flux-1-schnell",{prompt:prompt.trim(),steps:4});
+            if(!imageResult||typeof imageResult.image!=="string")throw new Error("Could not create the starter image for fallback.");
+            const binary=atob(imageResult.image);
+            const bytes=new Uint8Array(binary.length);
+            for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+            const uploadForm=new FormData();
+            uploadForm.append("files",new Blob([bytes],{type:"image/jpeg"}),"musex-wan-start.jpg");
+            const upload=await fetch(wanSpace+"/gradio_api/upload",{method:"POST",body:uploadForm,signal:AbortSignal.timeout(60000)});
+            if(!upload.ok)throw new Error("Wan 2.2 image upload failed (HTTP "+upload.status+").");
+            const paths=await upload.json();
+            if(!Array.isArray(paths)||!paths[0])throw new Error("Wan 2.2 image upload response was invalid.");
+            const imagePath=paths[0];
+            const imageData={path:imagePath,url:wanSpace+"/gradio_api/file="+imagePath,orig_name:"musex-wan-start.jpg",size:bytes.length,mime_type:"image/jpeg",meta:{_type:"gradio.FileData"}};
+            const wanSubmit=await fetch(wanSpace+"/gradio_api/call/generate_video",{
+              method:"POST",headers:{"Content-Type":"application/json"},
+              body:JSON.stringify({data:[imageData,null,prompt.trim(),4,"色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 风格, 作品, 画作, 画面, 静止, 整体发灰, 最差质量, 低质量, JPEG压缩残留, 丑陋的, 残缺的, 多余的手指, 画得不好的手部, 画得不好的脸部, 畸形的, 毁容的, 形态畸形的肢体, 手指融合, 静止不动的画面, 杂乱的背景, 三条腿, 背景人很多, 倒着走",3.5,1,1,42,true,6,"UniPCMultistep",3.0,16,false,true]}),
+              signal:AbortSignal.timeout(60000)
+            });
+            if(!wanSubmit.ok)throw new Error("Wan 2.2 job submit failed (HTTP "+wanSubmit.status+").");
+            const wanJob=await wanSubmit.json();
+            if(!wanJob.event_id)throw new Error("Wan 2.2 job ID missing.");
+            const wanResult=await fetch(wanSpace+"/gradio_api/call/generate_video/"+wanJob.event_id,{headers:{"Accept":"text/event-stream"},signal:AbortSignal.timeout(300000)});
+            if(!wanResult.ok)throw new Error("Wan 2.2 result stream failed (HTTP "+wanResult.status+").");
+            const wanRaw=await wanResult.text();
+            const wanPayload=parseGradioStream(wanRaw,"Wan 2.2");
+            const wanFirst=Array.isArray(wanPayload)?wanPayload[0]:null;
+            let wanVideo=wanFirst?.video?.url||wanFirst?.url||wanFirst?.video?.path||wanFirst?.path||(typeof wanFirst==="string"?wanFirst:null);
+            if(wanVideo&&!wanVideo.startsWith("https://")&&!wanVideo.startsWith("http://"))wanVideo=wanSpace+"/gradio_api/file="+wanVideo.replace(/^\/+/, "");
+            if(!wanVideo)throw new Error("Wan 2.2 returned no video file.");
+            const finalUrl=validateVideoUrl(wanVideo);
+            if(finalUrl.hostname!=="cbensimon-wan2-2-fp8da-aoti-preview2.hf.space")throw new Error("Wan 2.2 returned an unexpected video host.");
+            const proxiedVideoUrl=new URL("/video",url.origin);
+            proxiedVideoUrl.searchParams.set("url",finalUrl.toString());
+            return response({success:true,video_url:proxiedVideoUrl.toString(),model:"Wan 2.2 (hosted Space-selected variant)",fallback_used:true,primary_error:ltxError?.message||"LTX failed"});
+          } catch(wanError) {
+            return response({success:false,error:"Neither video generator was available.",primary_error:ltxError?.message||"LTX failed",fallback_error:wanError?.message||"Wan 2.2 failed",fallback_enabled:true},502);
+          }
         }
-        if(failure)throw new Error("LTX ماڈل کی خرابی: "+failure);
-        const first=Array.isArray(payload)?payload[0]:null;
-        const videoUrl=first?.video?.url||first?.url||(typeof first==="string"?first:null);
-        if(!videoUrl)throw new Error("LTX نے ویڈیو فائل واپس نہیں کی۔");
-        // Build the proxy URL using separate JavaScript statements.
-        const proxiedVideoUrl = new URL("/video", url.origin);
-        proxiedVideoUrl.searchParams.set("url", videoUrl);
-
-        return response({
-          success: true,
-          video_url: proxiedVideoUrl.toString(),
-          model: "LTX-Video distilled",
-        });
       } catch(error) {
         return response({success:false,error:error?.message||"ویڈیو نہیں بن سکی۔"},502);
       }
