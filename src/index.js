@@ -194,7 +194,11 @@ export default {
       try {
         const source = url.searchParams.get("url");
         if (!source) return response({ success: false, error: "Video URL missing." }, 400);
-        validateVideoUrl(source);
+        try {
+          validateVideoUrl(source);
+        } catch {
+          return response({ success: false, error: "Video source is not allowed." }, 400);
+        }
         const upstreamVideo = await fetchAllowedVideo(source, {
           headers: { "Accept": "video/*,application/octet-stream;q=0.9,*/*;q=0.8" },
           signal: AbortSignal.timeout(300000),
